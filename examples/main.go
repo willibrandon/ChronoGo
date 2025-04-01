@@ -30,10 +30,16 @@ func printUsage() {
 	fmt.Println("  concurrency     - Demo of manual concurrency instrumentation")
 	fmt.Println("  runtime-trace   - Demo of runtime/trace integration")
 	fmt.Println("  performance     - Demo of performance optimization features")
+	fmt.Println("  security        - Demo of security features (encryption, redaction, integrity)")
 	fmt.Println("\nThe performance demo has these subcommands:")
 	fmt.Println("  compression     - Demonstrate compression of event logs")
 	fmt.Println("  snapshots       - Demonstrate configurable snapshot intervals")
 	fmt.Println("  selective       - Demonstrate selective instrumentation options")
+	fmt.Println("\nThe security demo has these subcommands:")
+	fmt.Println("  encryption      - Demonstrate encryption of event logs")
+	fmt.Println("  redaction       - Demonstrate redaction of sensitive data")
+	fmt.Println("  integrity       - Demonstrate integrity checking and tamper detection")
+	fmt.Println("  all             - Run all security demos")
 }
 
 func runDemo(demoName string, args []string) error {
@@ -52,6 +58,8 @@ func runDemo(demoName string, args []string) error {
 		demoPath = filepath.Join(workingDir, "examples", "runtime_trace", "demo.go")
 	case "performance":
 		demoPath = filepath.Join(workingDir, "examples", "performance", "demo.go")
+	case "security":
+		demoPath = filepath.Join(workingDir, "examples", "security", "demo.go")
 	default:
 		return fmt.Errorf("unknown demo: %s", demoName)
 	}

@@ -39,7 +39,40 @@ go build -gcflags="all=-N -l" -o chrono.exe cmd/chrono/main.go
 - `s` - Step forward one event
 - `b` - Step backward one event
 - `l` - List active breakpoints
+- `p <var>` - Print the value of a variable
+- `watch <expr>` - Set a watchpoint to monitor memory changes
+  - `watch -r <expr>` - Break on reads of memory
+  - `watch -w <expr>` - Break on writes to memory
+  - `watch -rw <expr>` - Break on reads or writes (default)
 - `q` - Quit the debugger
+
+### Using Watchpoints
+
+Watchpoints monitor changes to variables or memory locations. In ChronoGo, they work in two modes:
+
+1. **Live Debugging Mode**: When the Delve process is active, watchpoints use Delve's native watchpoint functionality to monitor memory access during live execution.
+
+2. **Replay Mode**: When viewing recorded events, ChronoGo simulates watchpoints by analyzing statement execution events that contain assignments to variables.
+
+To use watchpoints effectively:
+
+1. Set a breakpoint at a line where the variable is in scope: `bp file:line`
+2. Continue execution to that breakpoint: `c`
+3. Set a watchpoint on the variable: `watch x` or with options `watch -r x` (read), `watch -w x` (write)
+4. Continue execution to see changes: `c`
+
+**Note**: If the Delve process has already completed execution, watchpoints will work in replay-only mode and will highlight potential variable changes in the recorded events.
+
+#### Example workflow:
+
+```
+(chrono) bp D:/SRC/ChronoGo/cmd/chrono/main.go:26
+(chrono) c
+... breakpoint hit ...
+(chrono) watch x
+(chrono) c
+... program will stop when x changes ...
+```
 
 ## Current Limitations
 
@@ -55,6 +88,7 @@ go build -gcflags="all=-N -l" -o chrono.exe cmd/chrono/main.go
 - [x] Statement-level instrumentation
 - [x] Breakpoint management
 - [x] Integration with Delve
+- [x] Watchpoint support
 
 ### Phase 2: Enhanced Debugging Experience
 - [ ] Better synchronization between replayer and Delve
@@ -93,6 +127,11 @@ go build -gcflags="all=-N -l" -o chrono.exe cmd/chrono/main.go
 3. **Delve process exiting**
    - This is expected when the program completes
    - The replayer will still work for time-travel operations
+
+4. **Watchpoints not working**
+   - Ensure Delve process is still active
+   - Variables must be in scope at current execution point
+   - Use replay-mode watchpoints when Delve has exited
 
 ## Project Structure
 

@@ -16,17 +16,25 @@ const (
 	FunctionBreakpoint
 	// EventTypeBreakpoint breaks at a specific event type
 	EventTypeBreakpoint
+	// WatchpointRead breaks when a memory location is read
+	WatchpointRead
+	// WatchpointWrite breaks when a memory location is written
+	WatchpointWrite
+	// WatchpointReadWrite breaks when a memory location is read or written
+	WatchpointReadWrite
 )
 
 // Breakpoint represents a location to stop at during debugging
 type Breakpoint struct {
-	ID        int
-	Type      BreakpointType
-	File      string // For LocationBreakpoint
-	Line      int    // For LocationBreakpoint
-	Function  string // For FunctionBreakpoint
-	EventType string // For EventTypeBreakpoint
-	Enabled   bool
+	ID         int
+	Type       BreakpointType
+	File       string // For LocationBreakpoint
+	Line       int    // For LocationBreakpoint
+	Function   string // For FunctionBreakpoint
+	EventType  string // For EventTypeBreakpoint
+	Expression string // For Watchpoint: the expression to watch
+	Address    uint64 // For Watchpoint: the memory address to watch (if resolved)
+	Enabled    bool
 }
 
 // BreakpointManager manages breakpoints for the debugger
@@ -138,4 +146,33 @@ func (bm *BreakpointManager) CheckBreakpoint(details string, eventType string) b
 		}
 	}
 	return false
+}
+
+// AddWatchpoint adds a watchpoint for an expression
+func (bm *BreakpointManager) AddWatchpoint(expression string, watchType BreakpointType) (*Breakpoint, error) {
+	if watchType != WatchpointRead && watchType != WatchpointWrite && watchType != WatchpointReadWrite {
+		return nil, fmt.Errorf("invalid watchpoint type")
+	}
+
+	bp := &Breakpoint{
+		ID:         bm.nextID,
+		Type:       watchType,
+		Expression: expression,
+		Enabled:    true,
+	}
+	bm.nextID++
+
+	bm.breakpoints = append(bm.breakpoints, bp)
+	return bp, nil
+}
+
+// GetWatchpoints returns all watchpoints
+func (bm *BreakpointManager) GetWatchpoints() []*Breakpoint {
+	watchpoints := make([]*Breakpoint, 0)
+	for _, bp := range bm.breakpoints {
+		if bp.Type == WatchpointRead || bp.Type == WatchpointWrite || bp.Type == WatchpointReadWrite {
+			watchpoints = append(watchpoints, bp)
+		}
+	}
+	return watchpoints
 }

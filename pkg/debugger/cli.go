@@ -73,6 +73,7 @@ func (c *CLI) printHelp() {
 		fmt.Println("  list (l)        - List all breakpoints")
 		fmt.Println("  print (p) <var> - Print value of a variable")
 		fmt.Println("  goroutines (gr) - List all goroutines")
+		fmt.Println("  watch (w) [-r|-w|-rw] <expr> - Set a watchpoint")
 		fmt.Println("  bp remove <id>  - Remove a breakpoint")
 		fmt.Println("  bp enable <id>  - Enable a breakpoint")
 		fmt.Println("  bp disable <id> - Disable a breakpoint")
@@ -119,6 +120,8 @@ func (c *CLI) handleCommand(input string) {
 		c.handlePrintVariable(args)
 	case "gr", "goroutines":
 		c.handleListGoroutines()
+	case "w", "watch":
+		c.handleWatch(args)
 	default:
 		fmt.Printf("Unknown command: %s\n", cmd)
 		c.printHelp()
@@ -748,6 +751,89 @@ func (c *CLI) handleListGoroutines() {
 			fmt.Printf(" - %s (%s:%d)", g.CurrentLoc.Function.Name, g.CurrentLoc.File, g.CurrentLoc.Line)
 		}
 		fmt.Println()
+	}
+}
+
+// handleWatch handles the watch command
+func (c *CLI) handleWatch(args []string) {
+	if len(args) < 1 {
+		fmt.Println("Usage: watch [-r|-w|-rw] <expression>")
+		fmt.Println("  -r    stops when the memory location is read")
+		fmt.Println("  -w    stops when the memory location is written")
+		fmt.Println("  -rw   stops when the memory location is read or written (default)")
+		return
+	}
+
+	// Parse flags
+	var readFlag, writeFlag bool = true, true // Default to -rw
+	var expr string
+
+	if args[0] == "-r" {
+		if len(args) < 2 {
+			fmt.Println("Expression required")
+			return
+		}
+		readFlag, writeFlag = true, false
+		expr = args[1]
+	} else if args[0] == "-w" {
+		if len(args) < 2 {
+			fmt.Println("Expression required")
+			return
+		}
+		readFlag, writeFlag = false, true
+		expr = args[1]
+	} else if args[0] == "-rw" {
+		if len(args) < 2 {
+			fmt.Println("Expression required")
+			return
+		}
+		readFlag, writeFlag = true, true
+		expr = args[1]
+	} else {
+		// No flag, use the first arg as expression with default -rw
+		expr = args[0]
+	}
+
+	// Determine watchpoint type for our manager
+	var watchType BreakpointType
+	if readFlag && writeFlag {
+		watchType = WatchpointReadWrite
+	} else if readFlag {
+		watchType = WatchpointRead
+	} else {
+		watchType = WatchpointWrite
+	}
+
+	// Try to set watchpoint in Delve if it's active
+	var watchDbp *api.Breakpoint
+	var delveErr error
+
+	if c.debugger != nil {
+		watchDbp, delveErr = c.debugger.SetWatchpoint(expr, readFlag, writeFlag)
+		if delveErr != nil {
+			// Don't return error immediately - we'll still create a replay watchpoint
+			fmt.Printf("Warning: Unable to set live Delve watchpoint: %v\n", delveErr)
+			fmt.Println("Creating replay-only watchpoint instead.")
+		}
+	} else {
+		fmt.Println("Delve integration not active. Creating replay-only watchpoint.")
+	}
+
+	// Add to our breakpoint manager (for replay mode)
+	watchBp, err := c.bpManager.AddWatchpoint(expr, watchType)
+	if err != nil {
+		fmt.Printf("Error adding watchpoint to manager: %v\n", err)
+		return
+	}
+
+	if watchDbp != nil {
+		fmt.Printf("Watchpoint %d set on expression '%s' (Delve bp: %d)\n",
+			watchBp.ID, expr, watchDbp.ID)
+	} else {
+		fmt.Printf("Replay watchpoint %d set on expression '%s'\n",
+			watchBp.ID, expr)
+		fmt.Println("Note: This watchpoint will work during event replay only.")
+		fmt.Println("      Look for variable changes in recorded events.")
 	}
 }
 

@@ -2,6 +2,7 @@ package replay
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/willibrandon/ChronoGo/pkg/recorder"
@@ -77,6 +78,16 @@ func (r *BasicReplayer) ReplayUntilBreakpoint(breakpointCheck func(event recorde
 	for i := startIdx; i < len(r.events); i++ {
 		event := r.events[i]
 
+		// Check for variable changes in statements that might trigger a watchpoint
+		if event.Type == recorder.StatementExecution {
+			// Look for variable assignments in the details
+			details := event.Details
+			if strings.Contains(details, " = ") {
+				// This could be a variable assignment that would trigger a watchpoint
+				fmt.Printf("DEBUG: Potential variable change detected: %s\n", details)
+			}
+		}
+
 		// Check if this event hits a breakpoint BEFORE reporting
 		if haveBreakpointCheck && breakpointCheck(event) {
 			fmt.Printf("Breakpoint hit at event %d\n", i)
@@ -85,10 +96,9 @@ func (r *BasicReplayer) ReplayUntilBreakpoint(breakpointCheck func(event recorde
 		}
 
 		// Print event details
-		fmt.Printf("[%s] Event %d: %s - %s\n",
+		fmt.Printf("[%s] Event %d: %s\n",
 			event.Timestamp.Format(time.RFC3339),
 			event.ID,
-			event.Type,
 			event.Details)
 
 		r.currentIdx = i
@@ -128,4 +138,22 @@ func (r *BasicReplayer) CurrentIndex() int {
 // Events returns all loaded events
 func (r *BasicReplayer) Events() []recorder.Event {
 	return r.events
+}
+
+// Helper to get a human-readable event type name
+func (br *BasicReplayer) getEventTypeName(eventType recorder.EventType) string {
+	switch eventType {
+	case recorder.FuncEntry:
+		return "FunctionEntry"
+	case recorder.FuncExit:
+		return "FunctionExit"
+	case recorder.VarAssignment:
+		return "VariableAssignment"
+	case recorder.GoroutineSwitch:
+		return "GoroutineSwitch"
+	case recorder.StatementExecution:
+		return "StatementExecution"
+	default:
+		return "Unknown"
+	}
 }

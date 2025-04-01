@@ -317,3 +317,59 @@ func isWaitAlreadyExited(err error) bool {
 	}
 	return false
 }
+
+// SetWatchpoint sets a watchpoint on a variable or address
+func (d *DelveDebugger) SetWatchpoint(expr string, readFlag, writeFlag bool) (*api.Breakpoint, error) {
+	// Get current state to determine goroutine/frame context
+	state, err := d.client.GetState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get state: %v", err)
+	}
+
+	// Create evaluation scope
+	scope := api.EvalScope{
+		GoroutineID: -1, // Use default goroutine
+		Frame:       0,  // Use current frame
+	}
+
+	// If we have a current thread, use its goroutine
+	if state.CurrentThread != nil && state.CurrentThread.GoroutineID > 0 {
+		scope.GoroutineID = state.CurrentThread.GoroutineID
+	}
+
+	// Standard load config
+	cfg := api.LoadConfig{
+		FollowPointers:     true,
+		MaxVariableRecurse: 1,
+		MaxStringLen:       64,
+		MaxArrayValues:     64,
+		MaxStructFields:    -1,
+	}
+
+	// Try to evaluate the expression to get the address
+	v, err := d.client.EvalVariable(scope, expr, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate expression '%s': %v", expr, err)
+	}
+
+	// Create a basic breakpoint at the variable's address
+	bp := &api.Breakpoint{
+		Addr: v.Addr,
+	}
+
+	// Set the breakpoint conditions based on read/write flags
+	// This is a simplified approach - Delve's API might provide
+	// more direct support for watchpoints depending on the version
+	if readFlag && writeFlag {
+		bp.Cond = fmt.Sprintf("(read || write) to %s", expr)
+	} else if readFlag {
+		bp.Cond = fmt.Sprintf("read of %s", expr)
+	} else if writeFlag {
+		bp.Cond = fmt.Sprintf("write to %s", expr)
+	} else {
+		return nil, fmt.Errorf("at least one of read or write flag must be set")
+	}
+
+	// Set the watchpoint using Delve API
+	return d.client.CreateBreakpoint(bp)
+}

@@ -20,6 +20,8 @@ const (
 	ChannelOperation
 	// SyncOperation indicates a synchronization primitive operation (mutex lock/unlock)
 	SyncOperation
+	// SnapshotEvent indicates a state snapshot was created
+	SnapshotEvent
 	// ... add more as needed
 )
 
@@ -51,7 +53,21 @@ func (et EventType) String() string {
 		return "ChannelOperation"
 	case SyncOperation:
 		return "SyncOperation"
+	case SnapshotEvent:
+		return "SnapshotEvent"
 	default:
 		return "Unknown"
 	}
+}
+
+// Configuration options for ChronoGo
+var (
+	// SnapshotInterval determines how often snapshots are created (every N events)
+	// 0 means no automatic snapshots
+	SnapshotInterval = 1000
+)
+
+// CurrentTime returns the current time, allowing for testing overrides
+func CurrentTime() time.Time {
+	return time.Now()
 }

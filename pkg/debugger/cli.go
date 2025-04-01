@@ -196,7 +196,7 @@ func (c *CLI) handleBreakpointCommand(args []string) {
 			// Get current breakpoint
 			bp, err := c.debugger.client.GetBreakpoint(id)
 			if err != nil {
-				fmt.Printf("Error getting breakpoint from Delve: %v\n", id, err)
+				fmt.Printf("Error getting breakpoint %d from Delve: %v\n", id, err)
 				return
 			}
 
@@ -204,7 +204,7 @@ func (c *CLI) handleBreakpointCommand(args []string) {
 			bp.Disabled = false // Note: Delve uses Disabled rather than Enabled
 			err = c.debugger.client.AmendBreakpoint(bp)
 			if err != nil {
-				fmt.Printf("Error enabling breakpoint in Delve: %v\n", id, err)
+				fmt.Printf("Error enabling breakpoint %d in Delve: %v\n", id, err)
 				return
 			}
 		}
@@ -232,7 +232,7 @@ func (c *CLI) handleBreakpointCommand(args []string) {
 			// Get current breakpoint
 			bp, err := c.debugger.client.GetBreakpoint(id)
 			if err != nil {
-				fmt.Printf("Error getting breakpoint from Delve: %v\n", id, err)
+				fmt.Printf("Error getting breakpoint %d from Delve: %v\n", id, err)
 				return
 			}
 
@@ -240,7 +240,7 @@ func (c *CLI) handleBreakpointCommand(args []string) {
 			bp.Disabled = true // Note: Delve uses Disabled rather than Enabled
 			err = c.debugger.client.AmendBreakpoint(bp)
 			if err != nil {
-				fmt.Printf("Error disabling breakpoint in Delve: %v\n", id, err)
+				fmt.Printf("Error disabling breakpoint %d in Delve: %v\n", id, err)
 				return
 			}
 		}
@@ -748,7 +748,7 @@ func (c *CLI) handleListGoroutines() {
 	for i, g := range goroutines {
 		fmt.Printf("[%d] Goroutine %d", i, g.ID)
 		if g.CurrentLoc.Function != nil {
-			fmt.Printf(" - %s (%s:%d)", g.CurrentLoc.Function.Name, g.CurrentLoc.File, g.CurrentLoc.Line)
+			fmt.Printf(" - %s (%s:%d)", g.CurrentLoc.Function.Name(), g.CurrentLoc.File, g.CurrentLoc.Line)
 		}
 		fmt.Println()
 	}

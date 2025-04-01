@@ -2,6 +2,7 @@ package instrumentation
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/willibrandon/ChronoGo/pkg/recorder"
@@ -9,6 +10,11 @@ import (
 
 // GoroutineCreate records a goroutine creation event
 func GoroutineCreate(gID int) {
+	// Skip recording if selective instrumentation is disabled for caller
+	if !shouldInstrumentCaller() {
+		return
+	}
+
 	if globalRecorder != nil {
 		globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
@@ -21,6 +27,11 @@ func GoroutineCreate(gID int) {
 
 // GoroutineSwitch records a scheduler switch between goroutines
 func GoroutineSwitch(fromID, toID int) {
+	// Skip recording if selective instrumentation is disabled for caller
+	if !shouldInstrumentCaller() {
+		return
+	}
+
 	if globalRecorder != nil {
 		globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
@@ -33,6 +44,11 @@ func GoroutineSwitch(fromID, toID int) {
 
 // ChannelSend records a channel send operation
 func ChannelSend(chID, senderID int, value interface{}) {
+	// Skip recording if selective instrumentation is disabled for caller
+	if !shouldInstrumentCaller() {
+		return
+	}
+
 	if globalRecorder != nil {
 		globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
@@ -45,6 +61,11 @@ func ChannelSend(chID, senderID int, value interface{}) {
 
 // ChannelRecv records a channel receive operation
 func ChannelRecv(chID, receiverID int, value interface{}) {
+	// Skip recording if selective instrumentation is disabled for caller
+	if !shouldInstrumentCaller() {
+		return
+	}
+
 	if globalRecorder != nil {
 		globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
@@ -57,6 +78,11 @@ func ChannelRecv(chID, receiverID int, value interface{}) {
 
 // ChannelClose records a channel close operation
 func ChannelClose(chID, goroutineID int) {
+	// Skip recording if selective instrumentation is disabled for caller
+	if !shouldInstrumentCaller() {
+		return
+	}
+
 	if globalRecorder != nil {
 		globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
@@ -69,6 +95,11 @@ func ChannelClose(chID, goroutineID int) {
 
 // MutexLock records a mutex lock acquisition
 func MutexLock(mutexID, goroutineID int) {
+	// Skip recording if selective instrumentation is disabled for caller
+	if !shouldInstrumentCaller() {
+		return
+	}
+
 	if globalRecorder != nil {
 		globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
@@ -81,6 +112,11 @@ func MutexLock(mutexID, goroutineID int) {
 
 // MutexUnlock records a mutex unlock operation
 func MutexUnlock(mutexID, goroutineID int) {
+	// Skip recording if selective instrumentation is disabled for caller
+	if !shouldInstrumentCaller() {
+		return
+	}
+
 	if globalRecorder != nil {
 		globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
@@ -89,4 +125,23 @@ func MutexUnlock(mutexID, goroutineID int) {
 			Details:   fmt.Sprintf("Mutex %d: unlocked by goroutine %d", mutexID, goroutineID),
 		})
 	}
+}
+
+// shouldInstrumentCaller checks if the caller's package should be instrumented
+func shouldInstrumentCaller() bool {
+	// Skip 2 frames to get the actual caller (not this function or the instrumentation function)
+	pc, _, _, ok := runtime.Caller(2)
+	if !ok {
+		// If we can't determine caller, default to instrumenting
+		return true
+	}
+
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return true
+	}
+
+	fullName := fn.Name()
+	pkgPath := extractPackagePath(fullName)
+	return ShouldInstrument(pkgPath)
 }

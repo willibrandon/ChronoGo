@@ -13,46 +13,60 @@ func main() {
 		return
 	}
 
-	switch os.Args[1] {
-	case "concurrency":
-		fmt.Println("Running concurrency demo...")
-		runDemo("concurrency")
-	case "runtime-trace":
-		fmt.Println("Running runtime trace demo...")
-		runDemo("runtime_trace")
-	default:
-		printUsage()
+	demoName := os.Args[1]
+	remainingArgs := os.Args[2:]
+
+	err := runDemo(demoName, remainingArgs)
+	if err != nil {
+		fmt.Printf("Error running demo %s: %v\n", demoName, err)
+		os.Exit(1)
 	}
 }
 
 func printUsage() {
-	fmt.Println("ChronoGo Demos")
-	fmt.Println("=============")
-	fmt.Println("Usage: go run main.go [demo-name]")
+	fmt.Println("ChronoGo Demo Launcher")
+	fmt.Println("Usage: go run examples/main.go <demo-name> [demo-args]")
 	fmt.Println("\nAvailable demos:")
-	fmt.Println("  concurrency   - Basic concurrency instrumentation demo")
-	fmt.Println("  runtime-trace - Runtime trace integration demo")
+	fmt.Println("  concurrency     - Demo of manual concurrency instrumentation")
+	fmt.Println("  runtime-trace   - Demo of runtime/trace integration")
+	fmt.Println("  performance     - Demo of performance optimization features")
+	fmt.Println("\nThe performance demo has these subcommands:")
+	fmt.Println("  compression     - Demonstrate compression of event logs")
+	fmt.Println("  snapshots       - Demonstrate configurable snapshot intervals")
+	fmt.Println("  selective       - Demonstrate selective instrumentation options")
 }
 
-func runDemo(demoName string) {
-	// Get the current executable's directory
-	exePath, err := os.Executable()
+func runDemo(demoName string, args []string) error {
+	// Get the directory of the examples folder directly
+	workingDir, err := os.Getwd()
 	if err != nil {
-		fmt.Printf("Error getting executable path: %v\n", err)
-		return
+		return fmt.Errorf("failed to get working directory: %v", err)
 	}
 
 	// Construct the path to the demo directory
-	demoDir := filepath.Join(filepath.Dir(exePath), demoName)
+	var demoPath string
+	switch demoName {
+	case "concurrency":
+		demoPath = filepath.Join(workingDir, "examples", "concurrency", "demo.go")
+	case "runtime-trace":
+		demoPath = filepath.Join(workingDir, "examples", "runtime_trace", "demo.go")
+	case "performance":
+		demoPath = filepath.Join(workingDir, "examples", "performance", "demo.go")
+	default:
+		return fmt.Errorf("unknown demo: %s", demoName)
+	}
 
-	// Create a new command to run the demo
-	cmd := exec.Command("go", "run", ".")
-	cmd.Dir = demoDir
+	// Ensure the demo file exists
+	if _, err := os.Stat(demoPath); os.IsNotExist(err) {
+		return fmt.Errorf("demo file not found at %s", demoPath)
+	}
+
+	// Run the demo as a command
+	fmt.Printf("Running demo: %s with path: %s\n", demoName, demoPath)
+	cmd := exec.Command("go", append([]string{"run", demoPath}, args...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 
-	// Run the demo
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("Error running demo: %v\n", err)
-	}
+	return cmd.Run()
 }

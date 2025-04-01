@@ -7,6 +7,7 @@
 *.dll
 *.so
 *.dylib
+chrono
 
 # Test binary, built with `go test -c`
 *.test
@@ -27,3 +28,13 @@ go.work.sum
 # ChronoGo debug/trace files
 events.log
 *.log
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific
+.DS_Store
+Thumbs.db

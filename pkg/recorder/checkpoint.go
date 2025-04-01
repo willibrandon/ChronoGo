@@ -2,30 +2,24 @@ package recorder
 
 import (
 	"fmt"
-	"time"
 )
 
-// Checkpoint represents a point in time during program execution
-// that we can restore to and replay forward from
+// Checkpoint represents a point in time in the execution of a program
+// It combines a snapshot of program state with the event index
 type Checkpoint struct {
-	ID        int64
-	Snapshot  Snapshot
-	EventIdx  int
-	Timestamp time.Time
+	Snapshot Snapshot
+	EventIdx int
 }
 
-// NewCheckpoint creates a new checkpoint with the given snapshot and event index
+// NewCheckpoint creates a new checkpoint
 func NewCheckpoint(snapshot Snapshot, eventIdx int) *Checkpoint {
 	return &Checkpoint{
-		ID:        time.Now().UnixNano(),
-		Snapshot:  snapshot,
-		EventIdx:  eventIdx,
-		Timestamp: time.Now(),
+		Snapshot: snapshot,
+		EventIdx: eventIdx,
 	}
 }
 
 // String returns a human-readable representation of the checkpoint
 func (c *Checkpoint) String() string {
-	return fmt.Sprintf("Checkpoint{ID: %d, EventIdx: %d, Time: %s}",
-		c.ID, c.EventIdx, c.Timestamp.Format(time.RFC3339))
+	return fmt.Sprintf("Checkpoint{EventIdx: %d}", c.EventIdx)
 }

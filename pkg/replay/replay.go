@@ -33,17 +33,36 @@ type Replayer interface {
 	Events() []recorder.Event
 }
 
+// GoroutineState tracks the state of a goroutine
+type GoroutineState struct {
+	ID      int
+	Running bool
+}
+
+// ChannelState tracks the state of a channel
+type ChannelState struct {
+	ID       int
+	Messages []interface{}
+	Closed   bool
+}
+
 // BasicReplayer implements the Replayer interface
 type BasicReplayer struct {
-	events     []recorder.Event
-	currentIdx int
+	events          []recorder.Event
+	currentIdx      int
+	goroutines      map[int]*GoroutineState // Track goroutine states
+	channels        map[int]*ChannelState   // Track channel states
+	activeGoroutine int                     // Currently active goroutine
 }
 
 // NewBasicReplayer creates a new BasicReplayer
 func NewBasicReplayer() *BasicReplayer {
 	return &BasicReplayer{
-		events:     []recorder.Event{},
-		currentIdx: -1,
+		events:          []recorder.Event{},
+		currentIdx:      -1,
+		goroutines:      make(map[int]*GoroutineState),
+		channels:        make(map[int]*ChannelState),
+		activeGoroutine: 1, // Start with main goroutine (ID 1)
 	}
 }
 
@@ -51,6 +70,15 @@ func NewBasicReplayer() *BasicReplayer {
 func (r *BasicReplayer) LoadEvents(events []recorder.Event) error {
 	r.events = events
 	r.currentIdx = -1
+
+	// Initialize concurrency tracking
+	r.goroutines = make(map[int]*GoroutineState)
+	r.channels = make(map[int]*ChannelState)
+	r.activeGoroutine = 1 // Reset to main goroutine
+
+	// Initialize the main goroutine
+	r.goroutines[1] = &GoroutineState{ID: 1, Running: true}
+
 	return nil
 }
 
@@ -78,6 +106,9 @@ func (r *BasicReplayer) ReplayUntilBreakpoint(breakpointCheck func(event recorde
 	for i := startIdx; i < len(r.events); i++ {
 		event := r.events[i]
 
+		// Process concurrency events to update goroutine and channel states
+		r.processGoroutineAndChannelEvents(event)
+
 		// Check for variable changes in statements that might trigger a watchpoint
 		if event.Type == recorder.StatementExecution {
 			// Look for variable assignments in the details
@@ -95,11 +126,21 @@ func (r *BasicReplayer) ReplayUntilBreakpoint(breakpointCheck func(event recorde
 			return nil
 		}
 
-		// Print event details
-		fmt.Printf("[%s] Event %d: %s\n",
-			event.Timestamp.Format(time.RFC3339),
-			event.ID,
-			event.Details)
+		// Print event details with goroutine info for concurrency events
+		if event.Type == recorder.GoroutineSwitch ||
+			event.Type == recorder.ChannelOperation ||
+			event.Type == recorder.SyncOperation {
+			fmt.Printf("[%s] Event %d: %s (Goroutine %d)\n",
+				event.Timestamp.Format(time.RFC3339),
+				event.ID,
+				event.Details,
+				r.activeGoroutine)
+		} else {
+			fmt.Printf("[%s] Event %d: %s\n",
+				event.Timestamp.Format(time.RFC3339),
+				event.ID,
+				event.Details)
+		}
 
 		r.currentIdx = i
 		time.Sleep(50 * time.Millisecond) // Simulate time between events
@@ -107,6 +148,67 @@ func (r *BasicReplayer) ReplayUntilBreakpoint(breakpointCheck func(event recorde
 
 	fmt.Println("Replay complete")
 	return nil
+}
+
+// processGoroutineAndChannelEvents updates the internal state based on concurrency events
+func (r *BasicReplayer) processGoroutineAndChannelEvents(event recorder.Event) {
+	switch event.Type {
+	case recorder.GoroutineSwitch:
+		// Handle goroutine creation or switching
+		if strings.Contains(event.Details, "created") {
+			// Extract goroutine ID from the details
+			var gID int
+			fmt.Sscanf(event.Details, "Goroutine %d created", &gID)
+			r.goroutines[gID] = &GoroutineState{ID: gID, Running: true}
+		} else if strings.Contains(event.Details, "switch from") {
+			// Extract from and to goroutine IDs
+			var fromID, toID int
+			fmt.Sscanf(event.Details, "Goroutine switch from %d to %d", &fromID, &toID)
+			if g, exists := r.goroutines[fromID]; exists {
+				g.Running = false
+			}
+			if g, exists := r.goroutines[toID]; exists {
+				g.Running = true
+			} else {
+				// Create it if it doesn't exist
+				r.goroutines[toID] = &GoroutineState{ID: toID, Running: true}
+			}
+			r.activeGoroutine = toID
+		}
+
+	case recorder.ChannelOperation:
+		// Handle channel operations (send, receive, close)
+		if strings.Contains(event.Details, "send by") {
+			// Extract channel ID, goroutine ID, and value
+			var chID, gID int
+			fmt.Sscanf(event.Details, "Channel %d: send by goroutine %d", &chID, &gID)
+
+			// Ensure the channel exists in our map
+			if _, exists := r.channels[chID]; !exists {
+				r.channels[chID] = &ChannelState{ID: chID, Messages: []interface{}{}, Closed: false}
+			}
+
+		} else if strings.Contains(event.Details, "receive by") {
+			// Extract channel ID and goroutine ID
+			var chID, gID int
+			fmt.Sscanf(event.Details, "Channel %d: receive by goroutine %d", &chID, &gID)
+
+			// Ensure the channel exists
+			if _, exists := r.channels[chID]; !exists {
+				r.channels[chID] = &ChannelState{ID: chID, Messages: []interface{}{}, Closed: false}
+			}
+
+		} else if strings.Contains(event.Details, "closed by") {
+			// Extract channel ID and goroutine ID
+			var chID, gID int
+			fmt.Sscanf(event.Details, "Channel %d: closed by goroutine %d", &chID, &gID)
+
+			// Mark the channel as closed
+			if ch, exists := r.channels[chID]; exists {
+				ch.Closed = true
+			}
+		}
+	}
 }
 
 // ReplayToEventIndex replays events up to the specified index
@@ -153,6 +255,10 @@ func (br *BasicReplayer) getEventTypeName(eventType recorder.EventType) string {
 		return "GoroutineSwitch"
 	case recorder.StatementExecution:
 		return "StatementExecution"
+	case recorder.ChannelOperation:
+		return "ChannelOperation"
+	case recorder.SyncOperation:
+		return "SyncOperation"
 	default:
 		return "Unknown"
 	}

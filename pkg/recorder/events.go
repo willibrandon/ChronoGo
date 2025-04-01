@@ -16,6 +16,10 @@ const (
 	GoroutineSwitch
 	// StatementExecution indicates execution of a specific statement
 	StatementExecution
+	// ChannelOperation indicates a channel operation (send/receive/close)
+	ChannelOperation
+	// SyncOperation indicates a synchronization primitive operation (mutex lock/unlock)
+	SyncOperation
 	// ... add more as needed
 )
 
@@ -43,6 +47,10 @@ func (et EventType) String() string {
 		return "GoroutineSwitch"
 	case StatementExecution:
 		return "StatementExecution"
+	case ChannelOperation:
+		return "ChannelOperation"
+	case SyncOperation:
+		return "SyncOperation"
 	default:
 		return "Unknown"
 	}

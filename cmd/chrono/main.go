@@ -8,6 +8,7 @@ import (
 
 	"github.com/willibrandon/ChronoGo/pkg/instrumentation"
 	"github.com/willibrandon/ChronoGo/pkg/recorder"
+	"github.com/willibrandon/ChronoGo/pkg/replay"
 )
 
 func testFunction() {
@@ -28,16 +29,18 @@ func main() {
 
 	instrumentation.InitInstrumentation(r)
 
+	fmt.Println("Recording events...")
 	testFunction()
 
-	// Read and display recorded events
+	// Read recorded events
 	events := r.GetEvents()
 	fmt.Printf("\nRecorded Events:\n")
 	for _, e := range events {
 		fmt.Printf("[%d] %s: %s\n", e.ID, e.Timestamp.Format(time.RFC3339Nano), e.Details)
 	}
 
-	// Create a snapshot after recording events
-	snapshot := recorder.CreateSnapshot(time.Now().UnixNano())
-	fmt.Printf("\nCreated Snapshot: ID=%d, Size=%d bytes\n", snapshot.ID, len(snapshot.MemDump))
+	// Create and use the replayer
+	replayer := replay.NewBasicReplayer()
+	replayer.LoadEvents(events)
+	replayer.ReplayForward()
 }

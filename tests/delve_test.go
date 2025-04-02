@@ -89,7 +89,7 @@ func TestDelveDebugger(t *testing.T) {
 		goBinary, err := exec.LookPath("go")
 		if err != nil {
 			if err := os.Chdir(origDir); err != nil {
-				t.Logf("Warning: Failed to change back to original directory: %v", err)
+				t.Fatalf("Error: Failed to change back to original directory: %v", err)
 			}
 			t.Fatalf("Failed to find go binary: %v", err)
 		}
@@ -103,7 +103,7 @@ func TestDelveDebugger(t *testing.T) {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			if err := os.Chdir(origDir); err != nil {
-				t.Logf("Warning: Failed to change back to original directory: %v", err)
+				t.Fatalf("Error: Failed to change back to original directory: %v", err)
 			}
 			t.Fatalf("Failed to build binary: %v\nOutput: %s", err, output)
 		}
@@ -143,9 +143,7 @@ func TestDelveDebugger(t *testing.T) {
 	}
 
 	if breakpointErr != nil {
-		t.Logf("Warning: Failed to set any breakpoint: %v", breakpointErr)
-		t.Logf("Basic connection test passed - Delve debugger created and closed successfully")
-		return // Don't fail, we at least validated debugger creation
+		t.Fatalf("Error: Failed to set any breakpoint: %v", breakpointErr)
 	}
 
 	t.Logf("Set breakpoint at %s", mainFile)
@@ -154,7 +152,7 @@ func TestDelveDebugger(t *testing.T) {
 	state, err := dbg.Continue()
 	if err != nil {
 		// If there's an error continuing, let's log it but not fail
-		t.Logf("Warning: Continue operation reported error: %v", err)
+		t.Fatalf("Error: Continue operation reported error: %v", err)
 	} else {
 		// Log where we stopped
 		t.Logf("Stopped at %s:%d", state.CurrentThread.File, state.CurrentThread.Line)
@@ -162,14 +160,14 @@ func TestDelveDebugger(t *testing.T) {
 		// Try to step
 		stepState, stepErr := dbg.Step()
 		if stepErr != nil {
-			t.Logf("Warning: Step operation reported error: %v", stepErr)
+			t.Logf("Error: Step operation reported error: %v", stepErr)
 		} else {
 			t.Logf("After step, now at %s:%d", stepState.CurrentThread.File, stepState.CurrentThread.Line)
 
 			// Try getting variables, but don't fail the test if it doesn't work
 			v, varErr := dbg.GetVariable("x")
 			if varErr != nil {
-				t.Logf("Note: Could not get variable 'x': %v", varErr)
+				t.Fatalf("Error: Could not get variable 'x': %v", varErr)
 			} else {
 				t.Logf("Variable x = %s", v.Value)
 				// Only assert equality if we got the variable

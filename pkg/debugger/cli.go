@@ -465,13 +465,35 @@ func (c *CLI) syncDebuggerToEvent(eventIdx int) error {
 	if event.Type == recorder.FuncEntry && event.FuncName != "" {
 		fmt.Printf("Attempting to synchronize to function: %s\n", event.FuncName)
 
-		// Use function breakpoint in Delve
-		// Note: Requires implementing SetFunctionBreakpoint (not shown here)
-		// Use goroutine/function name matching as fallback
+		// Try setting a function breakpoint
+		funcBp, err := c.debugger.SetFunctionBreakpoint(event.FuncName)
+		if err == nil {
+			fmt.Printf("Set function breakpoint at %s for synchronization\n", event.FuncName)
 
+			// Continue to this breakpoint
+			state, contErr := c.debugger.Continue()
+
+			// Clean up the temporary breakpoint
+			clearErr := c.debugger.ClearBreakpoint(funcBp.ID)
+			if clearErr != nil {
+				fmt.Printf("Warning: failed to clear temporary function breakpoint: %v\n", clearErr)
+			}
+
+			if contErr != nil {
+				fmt.Printf("Failed to continue to function %s: %v\n", event.FuncName, contErr)
+				// Fall through to try other approaches
+			} else if state != nil {
+				fmt.Printf("Debugger synchronized to function: %s at %s:%d\n",
+					event.FuncName, state.CurrentThread.File, state.CurrentThread.Line)
+				return nil
+			}
+		} else {
+			fmt.Printf("Could not set function breakpoint at %s: %v\n", event.FuncName, err)
+		}
+
+		// Fallback: Try to find a goroutine currently in this function
 		goroutines, err := c.debugger.ListGoroutines()
 		if err == nil {
-			// Try to find a goroutine currently in this function
 			for _, g := range goroutines {
 				if g.CurrentLoc.Function != nil &&
 					strings.Contains(g.CurrentLoc.Function.Name(), event.FuncName) {
@@ -999,6 +1021,20 @@ func (c *CLI) handleWatch(args []string) {
 			watchBp.ID, expr)
 		fmt.Println("Note: This watchpoint will work during event replay only.")
 		fmt.Println("      Look for variable changes in recorded events.")
+	}
+}
+
+// GetDebugger returns the current debugger instance in the CLI
+func (c *CLI) GetDebugger() *DelveDebugger {
+	return c.debugger
+}
+
+// CloseDebugger closes the current debugger in the CLI, without affecting
+// the other parts of the CLI state
+func (c *CLI) CloseDebugger() {
+	if c.debugger != nil {
+		c.debugger.Close()
+		c.debugger = nil
 	}
 }
 

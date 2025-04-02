@@ -97,6 +97,18 @@ func loadEventsFromFile(filePath string) ([]recorder.Event, error) {
 	return events, nil
 }
 
+// debugHelper provides a long-running function for debugging tests
+// This ensures the process doesn't exit immediately when being debugged
+func debugHelper() {
+	x := 42 // Simple variable to inspect
+	fmt.Println("Debug helper running. Process will wait for 30 seconds...")
+	for i := 0; i < 30; i++ {
+		fmt.Printf("Debug helper: %d seconds elapsed, x = %d\n", i, x)
+		time.Sleep(1 * time.Second)
+	}
+	fmt.Println("Debug helper complete")
+}
+
 // The main function coordinates the debugger and replayer
 func main() {
 	// Set custom usage function for better help
@@ -106,11 +118,18 @@ func main() {
 	eventsFileFlag := flag.String("events", "chronogo.events", "Path to the events file")
 	replayModeFlag := flag.Bool("replay", false, "Run in replay mode only (no execution)")
 	helpFlag := flag.Bool("help", false, "Show help message")
+	debugFlag := flag.Bool("debug", false, "Run in debug test mode")
 	flag.Parse()
 
 	// If help flag is explicitly set, show usage and exit
 	if *helpFlag {
 		printUsage()
+		return
+	}
+
+	// Special debug mode for testing
+	if *debugFlag {
+		debugHelper()
 		return
 	}
 

@@ -17,7 +17,18 @@ go build -gcflags="all=-N -l" -o chrono.exe cmd/chrono/main.go
 
 # Testing on itself (self-debugging)
 ./chrono.exe ./chrono.exe
+
+# Specify a custom events file
+./chrono.exe -events my-trace.log <target-executable>
+
+# Replay previously recorded events without executing a program
+./chrono.exe -replay -events my-trace.log
 ```
+
+## Command-Line Options
+
+- `-events <file>` - Specify the path to the events file (default: chronogo.events)
+- `-replay` - Run in replay mode only, loading events from the specified file
 
 ## Important Notes
 

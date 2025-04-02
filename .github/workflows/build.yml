@@ -36,6 +36,9 @@ jobs:
     - name: Build
       run: go build -v -trimpath ./cmd/chrono
 
+    - name: Install Delve debugger
+      run: go install github.com/go-delve/delve/cmd/dlv@latest
+
     - name: Test
       run: go test -v ./...
 

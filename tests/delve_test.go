@@ -91,8 +91,7 @@ func TestDelveDebugger(t *testing.T) {
 	}
 
 	// Build with debug info and disable optimizations, also add a special test mode flag
-	var cmd *exec.Cmd
-	cmd = exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "-ldflags", "-X main.testMode=true", "./cmd/chrono")
+	cmd := exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "-ldflags", "-X main.testMode=true", "./cmd/chrono")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

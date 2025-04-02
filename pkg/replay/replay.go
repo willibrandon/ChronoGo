@@ -158,12 +158,22 @@ func (r *BasicReplayer) processGoroutineAndChannelEvents(event recorder.Event) {
 		if strings.Contains(event.Details, "created") {
 			// Extract goroutine ID from the details
 			var gID int
-			fmt.Sscanf(event.Details, "Goroutine %d created", &gID)
+			_, err := fmt.Sscanf(event.Details, "Goroutine %d created", &gID)
+			if err != nil {
+				// If we can't parse the goroutine ID, use a default
+				gID = 0
+				fmt.Printf("Warning: Could not parse goroutine ID from %s: %v\n", event.Details, err)
+			}
 			r.goroutines[gID] = &GoroutineState{ID: gID, Running: true}
 		} else if strings.Contains(event.Details, "switch from") {
 			// Extract from and to goroutine IDs
 			var fromID, toID int
-			fmt.Sscanf(event.Details, "Goroutine switch from %d to %d", &fromID, &toID)
+			_, err := fmt.Sscanf(event.Details, "Goroutine switch from %d to %d", &fromID, &toID)
+			if err != nil {
+				// If we can't parse the goroutine IDs, use defaults
+				fmt.Printf("Warning: Could not parse goroutine switch IDs from %s: %v\n", event.Details, err)
+				return
+			}
 			if g, exists := r.goroutines[fromID]; exists {
 				g.Running = false
 			}
@@ -181,7 +191,12 @@ func (r *BasicReplayer) processGoroutineAndChannelEvents(event recorder.Event) {
 		if strings.Contains(event.Details, "send by") {
 			// Extract channel ID, goroutine ID, and value
 			var chID, gID int
-			fmt.Sscanf(event.Details, "Channel %d: send by goroutine %d", &chID, &gID)
+			_, err := fmt.Sscanf(event.Details, "Channel %d: send by goroutine %d", &chID, &gID)
+			if err != nil {
+				// If we can't parse the channel and goroutine IDs, use defaults
+				fmt.Printf("Warning: Could not parse channel send IDs from %s: %v\n", event.Details, err)
+				return
+			}
 
 			// Ensure the channel exists in our map
 			if _, exists := r.channels[chID]; !exists {
@@ -191,7 +206,12 @@ func (r *BasicReplayer) processGoroutineAndChannelEvents(event recorder.Event) {
 		} else if strings.Contains(event.Details, "receive by") {
 			// Extract channel ID and goroutine ID
 			var chID, gID int
-			fmt.Sscanf(event.Details, "Channel %d: receive by goroutine %d", &chID, &gID)
+			_, err := fmt.Sscanf(event.Details, "Channel %d: receive by goroutine %d", &chID, &gID)
+			if err != nil {
+				// If we can't parse the channel and goroutine IDs, use defaults
+				fmt.Printf("Warning: Could not parse channel receive IDs from %s: %v\n", event.Details, err)
+				return
+			}
 
 			// Ensure the channel exists
 			if _, exists := r.channels[chID]; !exists {
@@ -201,7 +221,12 @@ func (r *BasicReplayer) processGoroutineAndChannelEvents(event recorder.Event) {
 		} else if strings.Contains(event.Details, "closed by") {
 			// Extract channel ID and goroutine ID
 			var chID, gID int
-			fmt.Sscanf(event.Details, "Channel %d: closed by goroutine %d", &chID, &gID)
+			_, err := fmt.Sscanf(event.Details, "Channel %d: closed by goroutine %d", &chID, &gID)
+			if err != nil {
+				// If we can't parse the channel and goroutine IDs, use defaults
+				fmt.Printf("Warning: Could not parse channel close IDs from %s: %v\n", event.Details, err)
+				return
+			}
 
 			// Mark the channel as closed
 			if ch, exists := r.channels[chID]; exists {
@@ -240,26 +265,4 @@ func (r *BasicReplayer) CurrentIndex() int {
 // Events returns all loaded events
 func (r *BasicReplayer) Events() []recorder.Event {
 	return r.events
-}
-
-// Helper to get a human-readable event type name
-func (br *BasicReplayer) getEventTypeName(eventType recorder.EventType) string {
-	switch eventType {
-	case recorder.FuncEntry:
-		return "FunctionEntry"
-	case recorder.FuncExit:
-		return "FunctionExit"
-	case recorder.VarAssignment:
-		return "VariableAssignment"
-	case recorder.GoroutineSwitch:
-		return "GoroutineSwitch"
-	case recorder.StatementExecution:
-		return "StatementExecution"
-	case recorder.ChannelOperation:
-		return "ChannelOperation"
-	case recorder.SyncOperation:
-		return "SyncOperation"
-	default:
-		return "Unknown"
-	}
 }

@@ -195,8 +195,10 @@ func TestSecureEvent(t *testing.T) {
 
 		// Try to get original event (should fail integrity check)
 		_, err = secureEvent.GetOriginalEvent(opts)
-		// This might not fail since we didn't encrypt, so we're only checking HMAC when decrypting
-		// For stronger security, we would always verify HMAC
+		if err != nil {
+			// Handle error or log it for debugging
+			t.Logf("Error getting original event: %v", err)
+		}
 
 		// Verify HMAC directly
 		eventData, _ := json.Marshal(secureEvent.Event)

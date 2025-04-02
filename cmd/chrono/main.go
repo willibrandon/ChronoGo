@@ -138,7 +138,9 @@ func main() {
 
 		fmt.Printf("Loaded %d events. Entering replay mode...\n", len(events))
 		replayer := replay.NewBasicReplayer()
-		replayer.LoadEvents(events)
+		if err := replayer.LoadEvents(events); err != nil {
+			fmt.Printf("Error loading events: %v\n", err)
+		}
 		cli := debugger.NewCLI(replayer)
 		cli.Start()
 		return
@@ -181,7 +183,9 @@ func main() {
 
 			// Initialize replayer with loaded events
 			replayer := replay.NewBasicReplayer()
-			replayer.LoadEvents(events)
+			if err := replayer.LoadEvents(events); err != nil {
+				fmt.Printf("Error loading events: %v\n", err)
+			}
 
 			// Start CLI in replay mode
 			cli := debugger.NewCLI(replayer)
@@ -269,7 +273,9 @@ func main() {
 		fileRec, err := recorder.NewFileRecorder(customEventsFile)
 		if err == nil {
 			for _, e := range events {
-				fileRec.RecordEvent(e)
+				if err := fileRec.RecordEvent(e); err != nil {
+					fmt.Printf("Warning: Failed to record event: %v\n", err)
+				}
 			}
 			fileRec.Close()
 			fmt.Printf("Saved %d events to %s\n", len(events), customEventsFile)
@@ -278,7 +284,9 @@ func main() {
 		}
 	}
 
-	replayer.LoadEvents(events)
+	if err := replayer.LoadEvents(events); err != nil {
+		fmt.Printf("Error loading events: %v\n", err)
+	}
 
 	// Start the appropriate CLI (with or without Delve)
 	if delveErr != nil {

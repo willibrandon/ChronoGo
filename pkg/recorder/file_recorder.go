@@ -3,6 +3,7 @@ package recorder
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 )
@@ -84,7 +85,9 @@ func (fr *FileRecorder) RecordEvent(e Event) error {
 		snapshot := CreateSnapshot(e.ID)
 		// Store snapshot metadata with the event
 		// In a real implementation, we would store the actual memory state
-		fr.recordSnapshotEvent(snapshot, fr.eventCount)
+		if err := fr.recordSnapshotEvent(snapshot, fr.eventCount); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -119,7 +122,10 @@ func (fr *FileRecorder) recordSnapshotEvent(snapshot Snapshot, eventIdx int) err
 // GetEvents reads all events from the file, decompressing if necessary
 func (fr *FileRecorder) GetEvents() []Event {
 	// Ensure data is flushed to disk
-	CloseCompressedWriter(fr.writer, fr.compressionType)
+	if err := CloseCompressedWriter(fr.writer, fr.compressionType); err != nil {
+		// Log the error but continue - we still want to try reading events
+		fmt.Printf("Warning: Error closing compressed writer: %v\n", err)
+	}
 	fr.bufWriter.Flush()
 
 	// Open the file for reading
@@ -154,10 +160,14 @@ func (fr *FileRecorder) GetEvents() []Event {
 // Clear clears the file and resets the recorder
 func (fr *FileRecorder) Clear() {
 	// Ignore errors in Clear() as per interface
-	CloseCompressedWriter(fr.writer, fr.compressionType)
+	if err := CloseCompressedWriter(fr.writer, fr.compressionType); err != nil {
+		fmt.Printf("Warning: Error closing compressed writer: %v\n", err)
+	}
 	fr.bufWriter.Flush()
 	fr.file.Close()
-	os.Truncate(fr.path, 0)
+	if err := os.Truncate(fr.path, 0); err != nil {
+		fmt.Printf("Warning: Error truncating file: %v\n", err)
+	}
 
 	// Reopen the file
 	f, err := os.OpenFile(fr.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)

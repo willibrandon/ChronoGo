@@ -197,7 +197,9 @@ func TestSecureFileRecorderWithVariousOptions(t *testing.T) {
 			if tc.securityOpt.EnableIntegrityCheck {
 				// Create a copy for tampering
 				tamperedFile := testFile.Name() + ".tampered"
-				copyFile(testFile.Name(), tamperedFile)
+				if err := copyFile(testFile.Name(), tamperedFile); err != nil {
+					t.Fatalf("Failed to copy file: %v", err)
+				}
 				defer os.Remove(tamperedFile)
 
 				// Tamper with the file

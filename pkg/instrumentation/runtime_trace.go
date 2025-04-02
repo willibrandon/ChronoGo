@@ -170,12 +170,15 @@ func parseGoroutineStack(stack string) {
 	// Record state changes for significant states
 	if state == "running" || state == "waiting" || state == "locked" {
 		if traceInt.recorder != nil {
-			traceInt.recorder.RecordEvent(recorder.Event{
+			err := traceInt.recorder.RecordEvent(recorder.Event{
 				ID:        time.Now().UnixNano(),
 				Timestamp: time.Now(),
 				Type:      recorder.GoroutineSwitch,
 				Details:   fmt.Sprintf("Goroutine %d state: %s", ourGID, state),
 			})
+			if err != nil {
+				fmt.Printf("Error recording goroutine state change: %v\n", err)
+			}
 		}
 	}
 }
@@ -199,12 +202,15 @@ func TraceChannelOperation(ch interface{}, op string, value interface{}) {
 
 		// Record channel creation
 		if traceInt.recorder != nil {
-			traceInt.recorder.RecordEvent(recorder.Event{
+			err := traceInt.recorder.RecordEvent(recorder.Event{
 				ID:        time.Now().UnixNano(),
 				Timestamp: time.Now(),
 				Type:      recorder.ChannelOperation,
 				Details:   fmt.Sprintf("Channel %d created", chID),
 			})
+			if err != nil {
+				fmt.Printf("Error recording channel creation: %v\n", err)
+			}
 		}
 	}
 

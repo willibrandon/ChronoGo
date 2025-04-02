@@ -103,8 +103,15 @@ func TestBreakpointHitting(t *testing.T) {
 	bm := debugger.NewBreakpointManager()
 
 	// Add breakpoints
-	bm.AddBreakpoint("func:testFunction")
-	bm.AddBreakpoint("FunctionEntry")
+	_, err := bm.AddBreakpoint("func:testFunction")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
+
+	_, err = bm.AddBreakpoint("FunctionEntry")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
 
 	// Create some test events
 	events := []recorder.Event{

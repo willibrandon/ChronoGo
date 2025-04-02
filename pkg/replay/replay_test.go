@@ -63,10 +63,13 @@ func TestReplayToEventIndex(t *testing.T) {
 	}
 
 	// Load events
-	replayer.LoadEvents(events)
+	err := replayer.LoadEvents(events)
+	if err != nil {
+		t.Fatalf("Failed to load events: %v", err)
+	}
 
 	// Replay to index 1
-	err := replayer.ReplayToEventIndex(1)
+	err = replayer.ReplayToEventIndex(1)
 	if err != nil {
 		t.Fatalf("Failed to replay to event index: %v", err)
 	}
@@ -101,10 +104,16 @@ func TestStepBackward(t *testing.T) {
 	}
 
 	// Load events
-	replayer.LoadEvents(events)
+	err := replayer.LoadEvents(events)
+	if err != nil {
+		t.Fatalf("Failed to load events: %v", err)
+	}
 
 	// Set to index 2
-	replayer.ReplayToEventIndex(2)
+	err = replayer.ReplayToEventIndex(2)
+	if err != nil {
+		t.Fatalf("Failed to replay to event index: %v", err)
+	}
 
 	// Step back
 	newIdx, err := replayer.StepBackward(replayer.CurrentIndex())
@@ -149,7 +158,10 @@ func TestReplayUntilBreakpoint(t *testing.T) {
 	}
 
 	// Load events
-	replayer.LoadEvents(events)
+	err := replayer.LoadEvents(events)
+	if err != nil {
+		t.Fatalf("Failed to load events: %v", err)
+	}
 
 	// Create a breakpoint check for function2 entry
 	breakpointCheck := func(event recorder.Event) bool {
@@ -157,7 +169,7 @@ func TestReplayUntilBreakpoint(t *testing.T) {
 	}
 
 	// Replay until breakpoint
-	err := replayer.ReplayUntilBreakpoint(breakpointCheck)
+	err = replayer.ReplayUntilBreakpoint(breakpointCheck)
 	if err != nil {
 		t.Fatalf("Failed to replay until breakpoint: %v", err)
 	}
@@ -219,10 +231,13 @@ func TestConcurrencyEvents(t *testing.T) {
 	}
 
 	// Load events
-	replayer.LoadEvents(events)
+	err := replayer.LoadEvents(events)
+	if err != nil {
+		t.Fatalf("Failed to load events: %v", err)
+	}
 
 	// Replay all events to test concurrency handling
-	err := replayer.ReplayForward()
+	err = replayer.ReplayForward()
 	if err != nil {
 		t.Fatalf("Failed to replay events: %v", err)
 	}
@@ -237,8 +252,14 @@ func TestReplayerWithNoEvents(t *testing.T) {
 	// Create a replayer
 	replayer := NewBasicReplayer()
 
+	// Load an empty events array
+	err := replayer.LoadEvents([]recorder.Event{})
+	if err != nil {
+		t.Fatalf("Failed to load empty events: %v", err)
+	}
+
 	// Test replay with no events
-	err := replayer.ReplayForward()
+	err = replayer.ReplayForward()
 	if err != nil {
 		t.Errorf("ReplayForward with no events should not return error, got: %v", err)
 	}

@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/willibrandon/ChronoGo/pkg/instrumentation"
 	"github.com/willibrandon/ChronoGo/pkg/recorder"
@@ -112,81 +111,74 @@ func TestIntegrationWorkflow(t *testing.T) {
 // Helper function to simulate instrumented code execution
 func simulateInstrumentedCode(t *testing.T, r recorder.Recorder) {
 	// Simulate main function entry
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.FuncEntry,
 		FuncName: "main",
 		Details:  "Entering main function",
-	})
+	}); err != nil {
+		t.Errorf("Failed to record main entry event: %v", err)
+	}
 
 	// Simulate a function call with entry event
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.FuncEntry,
 		FuncName: "testFunction",
 		Details:  "Entering testFunction",
-	})
+	}); err != nil {
+		t.Errorf("Failed to record testFunction entry event: %v", err)
+	}
 
 	// Simulate variable assignment in the function
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.VarAssignment,
 		FuncName: "testFunction",
 		Details:  "y = 100",
-	})
+	}); err != nil {
+		t.Errorf("Failed to record variable assignment event: %v", err)
+	}
 
 	// Simulate function exit
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.FuncExit,
 		FuncName: "testFunction",
 		Details:  "Exiting testFunction",
-	})
+	}); err != nil {
+		t.Errorf("Failed to record function exit event: %v", err)
+	}
 
 	// Simulate goroutine creation
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.GoroutineSwitch,
 		FuncName: "main",
 		Details:  "Goroutine 2 created",
-	})
+	}); err != nil {
+		t.Errorf("Failed to record goroutine creation event: %v", err)
+	}
 
 	// Simulate variable assignment
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.VarAssignment,
 		FuncName: "main",
 		Details:  "x = 42",
-	})
+	}); err != nil {
+		t.Errorf("Failed to record variable assignment event: %v", err)
+	}
 
 	// Simulate channel operation
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.ChannelOperation,
 		FuncName: "main",
 		Details:  "Channel 1: send by goroutine 1, value: 42",
-	})
+	}); err != nil {
+		t.Errorf("Failed to record channel operation event: %v", err)
+	}
 
 	// Simulate main function exit
-	r.RecordEvent(recorder.Event{
+	if err := r.RecordEvent(recorder.Event{
 		Type:     recorder.FuncExit,
 		FuncName: "main",
 		Details:  "Exiting main function",
-	})
-}
-
-// testFunction is a helper function to simulate an instrumented function
-func testFunction(t *testing.T, rec recorder.Recorder) {
-	// Function entry
-	instrumentation.FuncEntry("testFunction", "test.go", 5)
-
-	// Simulate some operations
-	rec.RecordEvent(recorder.Event{
-		ID:        time.Now().UnixNano(),
-		Timestamp: time.Now(),
-		Type:      recorder.VarAssignment,
-		Details:   "y = 100",
-		File:      "test.go",
-		Line:      6,
-		FuncName:  "testFunction",
-	})
-
-	// Simulate statement execution
-	instrumentation.RecordStatement("testFunction", "test.go", 7, "Computing result = y * 2")
-
-	// Function exit
-	instrumentation.FuncExit("testFunction", "test.go", 10)
+	}); err != nil {
+		t.Errorf("Failed to record main exit event: %v", err)
+	}
 }

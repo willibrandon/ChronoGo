@@ -279,7 +279,10 @@ func (d *DelveDebugger) Close() error {
 	if d.client != nil {
 		// Detach from the process (kill=false is often problematic here, let Kill handle it)
 		// _, _ = d.client.Detach(false) // Try detaching gracefully first? Might hang.
-		d.client.Disconnect(false) // Disconnect the RPC client
+		if err := d.client.Disconnect(false); err != nil { // Disconnect the RPC client
+			fmt.Printf("Error disconnecting Delve client: %v\n", err)
+			closeErr = fmt.Errorf("failed to disconnect delve client: %v", err)
+		}
 		d.client = nil
 	}
 	if d.dlvCmd != nil && d.dlvCmd.Process != nil {

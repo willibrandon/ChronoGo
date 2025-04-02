@@ -29,7 +29,7 @@ func TestBasicReplayer(t *testing.T) {
 	replayer := replay.NewBasicReplayer()
 	err := replayer.LoadEvents(events)
 	if err != nil {
-		t.Errorf("Failed to load events: %v", err)
+		t.Fatalf("Failed to load events: %v", err)
 	}
 
 	// Verify replay

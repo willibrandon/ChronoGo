@@ -21,7 +21,7 @@ func FuncEntry(funcName string, file string, line int) {
 	// Special case for tests - always enable instrumentation for functions with "Test" prefix
 	if strings.HasPrefix(funcName, "Test") {
 		if globalRecorder != nil {
-			globalRecorder.RecordEvent(recorder.Event{
+			if err := globalRecorder.RecordEvent(recorder.Event{
 				ID:        time.Now().UnixNano(),
 				Timestamp: time.Now(),
 				Type:      recorder.FuncEntry,
@@ -29,7 +29,9 @@ func FuncEntry(funcName string, file string, line int) {
 				File:      file,
 				Line:      line,
 				FuncName:  funcName,
-			})
+			}); err != nil {
+				fmt.Printf("Error recording function entry event: %v\n", err)
+			}
 		}
 		return
 	}
@@ -41,7 +43,7 @@ func FuncEntry(funcName string, file string, line int) {
 	}
 
 	if globalRecorder != nil {
-		globalRecorder.RecordEvent(recorder.Event{
+		if err := globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
 			Timestamp: time.Now(),
 			Type:      recorder.FuncEntry,
@@ -49,7 +51,9 @@ func FuncEntry(funcName string, file string, line int) {
 			File:      file,
 			Line:      line,
 			FuncName:  funcName,
-		})
+		}); err != nil {
+			fmt.Printf("Error recording function entry event: %v\n", err)
+		}
 	}
 }
 
@@ -58,7 +62,7 @@ func FuncExit(funcName string, file string, line int) {
 	// Special case for tests - always enable instrumentation for functions with "Test" prefix
 	if strings.HasPrefix(funcName, "Test") {
 		if globalRecorder != nil {
-			globalRecorder.RecordEvent(recorder.Event{
+			if err := globalRecorder.RecordEvent(recorder.Event{
 				ID:        time.Now().UnixNano(),
 				Timestamp: time.Now(),
 				Type:      recorder.FuncExit,
@@ -66,7 +70,9 @@ func FuncExit(funcName string, file string, line int) {
 				File:      file,
 				Line:      line,
 				FuncName:  funcName,
-			})
+			}); err != nil {
+				fmt.Printf("Error recording function exit event: %v\n", err)
+			}
 		}
 		return
 	}
@@ -78,7 +84,7 @@ func FuncExit(funcName string, file string, line int) {
 	}
 
 	if globalRecorder != nil {
-		globalRecorder.RecordEvent(recorder.Event{
+		if err := globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
 			Timestamp: time.Now(),
 			Type:      recorder.FuncExit,
@@ -86,7 +92,9 @@ func FuncExit(funcName string, file string, line int) {
 			File:      file,
 			Line:      line,
 			FuncName:  funcName,
-		})
+		}); err != nil {
+			fmt.Printf("Error recording function exit event: %v\n", err)
+		}
 	}
 }
 
@@ -99,7 +107,7 @@ func RecordStatement(funcName string, file string, line int, description string)
 	}
 
 	if globalRecorder != nil {
-		globalRecorder.RecordEvent(recorder.Event{
+		if err := globalRecorder.RecordEvent(recorder.Event{
 			ID:        time.Now().UnixNano(),
 			Timestamp: time.Now(),
 			Type:      recorder.StatementExecution,
@@ -107,7 +115,9 @@ func RecordStatement(funcName string, file string, line int, description string)
 			File:      file,
 			Line:      line,
 			FuncName:  funcName,
-		})
+		}); err != nil {
+			fmt.Printf("Error recording statement execution event: %v\n", err)
+		}
 	}
 }
 

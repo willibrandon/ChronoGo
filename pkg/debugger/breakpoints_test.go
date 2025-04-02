@@ -100,9 +100,20 @@ func TestGetBreakpoints(t *testing.T) {
 	bm := NewBreakpointManager()
 
 	// Add a few breakpoints
-	bm.AddBreakpoint("test.go:10")
-	bm.AddBreakpoint("func:main")
-	bm.AddBreakpoint("VarAssignment")
+	_, err := bm.AddBreakpoint("test.go:10")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
+
+	_, err = bm.AddBreakpoint("func:main")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
+
+	_, err = bm.AddBreakpoint("VarAssignment")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
 
 	breakpoints := bm.GetBreakpoints()
 
@@ -187,11 +198,21 @@ func TestCheckBreakpoint(t *testing.T) {
 	bm := NewBreakpointManager()
 
 	// Add different types of breakpoints
-	bm.AddBreakpoint("func:testFunc")
-	bm.AddBreakpoint("FuncEntry")
+	_, err := bm.AddBreakpoint("func:testFunc")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
+
+	_, err = bm.AddBreakpoint("FuncEntry")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
 
 	// Disable the first breakpoint
-	bm.DisableBreakpoint(1)
+	err = bm.DisableBreakpoint(1)
+	if err != nil {
+		t.Fatalf("Failed to disable breakpoint: %v", err)
+	}
 
 	testCases := []struct {
 		details   string
@@ -241,15 +262,23 @@ func TestAddWatchpoint(t *testing.T) {
 	}
 
 	// Test adding write watchpoint
-	wp, err = bm.AddWatchpoint("y", WatchpointWrite)
+	wp2, err := bm.AddWatchpoint("y", WatchpointWrite)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
+	if wp2.Type != WatchpointWrite {
+		t.Errorf("Expected type %v, got %v", WatchpointWrite, wp2.Type)
+	}
+
 	// Test adding read/write watchpoint
-	wp, err = bm.AddWatchpoint("z", WatchpointReadWrite)
+	wp3, err := bm.AddWatchpoint("z", WatchpointReadWrite)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
+	}
+
+	if wp3.Type != WatchpointReadWrite {
+		t.Errorf("Expected type %v, got %v", WatchpointReadWrite, wp3.Type)
 	}
 
 	// Test invalid watchpoint type
@@ -263,9 +292,20 @@ func TestGetWatchpoints(t *testing.T) {
 	bm := NewBreakpointManager()
 
 	// Add various breakpoint types
-	bm.AddBreakpoint("test.go:10")
-	bm.AddWatchpoint("x", WatchpointRead)
-	bm.AddWatchpoint("y", WatchpointWrite)
+	_, err := bm.AddBreakpoint("test.go:10")
+	if err != nil {
+		t.Fatalf("Failed to add breakpoint: %v", err)
+	}
+
+	_, err = bm.AddWatchpoint("x", WatchpointRead)
+	if err != nil {
+		t.Fatalf("Failed to add watchpoint: %v", err)
+	}
+
+	_, err = bm.AddWatchpoint("y", WatchpointWrite)
+	if err != nil {
+		t.Fatalf("Failed to add watchpoint: %v", err)
+	}
 
 	watchpoints := bm.GetWatchpoints()
 

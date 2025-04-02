@@ -119,10 +119,13 @@ func TestConcurrencyReplay(t *testing.T) {
 
 	// Create a replayer and load the events
 	replayer := replay.NewBasicReplayer()
-	replayer.LoadEvents(rec.GetEvents())
+	err := replayer.LoadEvents(rec.GetEvents())
+	if err != nil {
+		t.Fatalf("Failed to load events: %v", err)
+	}
 
 	// Verify events can be processed without errors
-	err := replayer.ReplayForward()
+	err = replayer.ReplayForward()
 	if err != nil {
 		t.Fatalf("Error replaying events: %v", err)
 	}

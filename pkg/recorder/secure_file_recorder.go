@@ -3,6 +3,7 @@ package recorder
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 )
@@ -94,7 +95,9 @@ func (sfr *SecureFileRecorder) RecordEvent(e Event) error {
 	if SnapshotInterval > 0 && sfr.eventCount%SnapshotInterval == 0 {
 		snapshot := CreateSnapshot(e.ID)
 		// Store snapshot metadata with the event
-		sfr.recordSnapshotEvent(snapshot, sfr.eventCount)
+		if err := sfr.recordSnapshotEvent(snapshot, sfr.eventCount); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -135,7 +138,10 @@ func (sfr *SecureFileRecorder) recordSnapshotEvent(snapshot Snapshot, eventIdx i
 // GetEvents reads all events from the file, applying security features in reverse
 func (sfr *SecureFileRecorder) GetEvents() []Event {
 	// Ensure data is flushed to disk
-	CloseCompressedWriter(sfr.writer, sfr.compressionType)
+	if err := CloseCompressedWriter(sfr.writer, sfr.compressionType); err != nil {
+		// Log the error but continue - we still want to try reading events
+		fmt.Printf("Warning: Error closing compressed writer: %v\n", err)
+	}
 	sfr.bufWriter.Flush()
 
 	// Open the file for reading
@@ -179,10 +185,14 @@ func (sfr *SecureFileRecorder) GetEvents() []Event {
 // Clear clears the file and resets the recorder
 func (sfr *SecureFileRecorder) Clear() {
 	// Ignore errors in Clear() as per interface
-	CloseCompressedWriter(sfr.writer, sfr.compressionType)
+	if err := CloseCompressedWriter(sfr.writer, sfr.compressionType); err != nil {
+		fmt.Printf("Warning: Error closing compressed writer: %v\n", err)
+	}
 	sfr.bufWriter.Flush()
 	sfr.file.Close()
-	os.Truncate(sfr.path, 0)
+	if err := os.Truncate(sfr.path, 0); err != nil {
+		fmt.Printf("Warning: Error truncating file: %v\n", err)
+	}
 
 	// Reopen the file
 	f, err := os.OpenFile(sfr.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)

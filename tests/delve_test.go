@@ -143,9 +143,7 @@ func TestDelveDebugger(t *testing.T) {
 	}
 
 	if breakpointErr != nil {
-		t.Logf("Warning: Failed to set any breakpoint: %v", breakpointErr)
-		t.Logf("Basic connection test passed - Delve debugger created and closed successfully")
-		return // Don't fail, we at least validated debugger creation
+		t.Errorf("Error: Failed to set any breakpoint: %v", breakpointErr)
 	}
 
 	t.Logf("Set breakpoint at %s", mainFile)
@@ -153,8 +151,7 @@ func TestDelveDebugger(t *testing.T) {
 	// Try to continue to the breakpoint
 	state, err := dbg.Continue()
 	if err != nil {
-		// If there's an error continuing, let's log it but not fail
-		t.Logf("Warning: Continue operation reported error: %v", err)
+		t.Errorf("Error: Continue operation reported error: %v", err)
 	} else {
 		// Log where we stopped
 		t.Logf("Stopped at %s:%d", state.CurrentThread.File, state.CurrentThread.Line)
@@ -162,14 +159,14 @@ func TestDelveDebugger(t *testing.T) {
 		// Try to step
 		stepState, stepErr := dbg.Step()
 		if stepErr != nil {
-			t.Logf("Warning: Step operation reported error: %v", stepErr)
+			t.Errorf("Error: Step operation reported error: %v", stepErr)
 		} else {
 			t.Logf("After step, now at %s:%d", stepState.CurrentThread.File, stepState.CurrentThread.Line)
 
 			// Try getting variables, but don't fail the test if it doesn't work
 			v, varErr := dbg.GetVariable("x")
 			if varErr != nil {
-				t.Logf("Note: Could not get variable 'x': %v", varErr)
+				t.Errorf("Error: Could not get variable 'x': %v", varErr)
 			} else {
 				t.Logf("Variable x = %s", v.Value)
 				// Only assert equality if we got the variable

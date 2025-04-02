@@ -66,85 +66,89 @@ func TestDelveDebugger(t *testing.T) {
 	// Get the path to the test binary
 	var binaryPath string
 	if runtime.GOOS == "windows" {
-		binaryPath = filepath.Join(projectRoot, "chrono.exe")
+		binaryPath = filepath.Join(projectRoot, "chrono_test.exe")
 	} else {
-		binaryPath = filepath.Join(projectRoot, "chrono")
+		binaryPath = filepath.Join(projectRoot, "chrono_test")
 	}
 
-	// Build the binary if it doesn't exist
-	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-		t.Logf("Binary not found at %s, building now...", binaryPath)
+	// Build the binary with special test flag
+	t.Logf("Building test binary at %s", binaryPath)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	if err := os.Chdir(projectRoot); err != nil {
+		t.Fatalf("Failed to change to project root: %v", err)
+	}
 
-		// Change directory to project root and build
-		origDir, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("Failed to get current directory: %v", err)
-		}
-		if err := os.Chdir(projectRoot); err != nil {
-			t.Fatalf("Failed to change to project root: %v", err)
-		}
-
-		// Use cross-platform way to build the binary
-		var cmd *exec.Cmd
-		goBinary, err := exec.LookPath("go")
-		if err != nil {
-			if err := os.Chdir(origDir); err != nil {
-				t.Logf("Warning: Failed to change back to original directory: %v", err)
-			}
-			t.Fatalf("Failed to find go binary: %v", err)
-		}
-
-		if runtime.GOOS == "windows" {
-			cmd = exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "./cmd/chrono")
-		} else {
-			cmd = exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "./cmd/chrono")
-		}
-
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			if err := os.Chdir(origDir); err != nil {
-				t.Logf("Warning: Failed to change back to original directory: %v", err)
-			}
-			t.Fatalf("Failed to build binary: %v\nOutput: %s", err, output)
-		}
-
+	// Use cross-platform way to build the binary
+	goBinary, err := exec.LookPath("go")
+	if err != nil {
 		if err := os.Chdir(origDir); err != nil {
-			t.Fatalf("Failed to change back to original directory: %v", err)
+			t.Logf("Warning: Failed to change back to original directory: %v", err)
 		}
-
-		// Verify binary was built
-		if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-			t.Fatalf("Failed to build binary at %s", binaryPath)
-		}
+		t.Fatalf("Failed to find go binary: %v", err)
 	}
 
-	// Create a new Delve debugger
-	dbg, err := debugger.NewDelveDebugger(binaryPath)
+	// Build with debug info and disable optimizations, also add a special test mode flag
+	var cmd *exec.Cmd
+	cmd = exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "-ldflags", "-X main.testMode=true", "./cmd/chrono")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if err := os.Chdir(origDir); err != nil {
+			t.Logf("Warning: Failed to change back to original directory: %v", err)
+		}
+		t.Fatalf("Failed to build binary: %v\nOutput: %s", err, output)
+	}
+
+	if err := os.Chdir(origDir); err != nil {
+		t.Fatalf("Failed to change back to original directory: %v", err)
+	}
+
+	// Create a temporary events file for the test to use
+	eventsFile, err := os.CreateTemp("", "chronogo-test-*.events")
+	if err != nil {
+		t.Fatalf("Failed to create temporary events file: %v", err)
+	}
+	defer os.Remove(eventsFile.Name())
+	eventsFile.Close()
+
+	// Create a new Delve debugger with arguments that trigger the test function
+	dbgArgs := []string{"--test"}
+	dbg, err := debugger.NewDelveDebuggerWithArgs(binaryPath, dbgArgs)
 	if err != nil {
 		t.Fatalf("Failed to create Delve debugger: %v", err)
 	}
 	defer dbg.Close()
 
-	// Set a breakpoint at the first statement in testFunction
+	// Set a breakpoint at the testFunction entry point
+	bp, breakpointErr := dbg.SetFunctionBreakpoint("main.testFunction")
+	if breakpointErr != nil {
+		t.Errorf("Error: Failed to set function breakpoint: %v", breakpointErr)
+	} else {
+		t.Logf("Successfully set breakpoint at function main.testFunction (ID: %d)", bp.ID)
+	}
+
+	// Try another breakpoint at a specific line in testFunction
 	mainFile := filepath.Join(projectRoot, "cmd", "chrono", "main.go")
 	if _, err := os.Stat(mainFile); os.IsNotExist(err) {
 		t.Fatalf("Source file not found at %s", mainFile)
 	}
 
-	// Set a breakpoint at the testFunction entry point
-	_, breakpointErr := dbg.SetFunctionBreakpoint("main.testFunction")
-	if breakpointErr != nil {
-		t.Errorf("Error: Failed to set function breakpoint: %v", breakpointErr)
+	bp2, err := dbg.SetBreakpoint(mainFile, 42) // Line with 'x := 42'
+	if err != nil {
+		t.Logf("Note: Could not set line breakpoint: %v", err)
+	} else {
+		t.Logf("Set additional breakpoint at %s:%d (ID: %d)", bp2.File, bp2.Line, bp2.ID)
 	}
 
-	t.Logf("Set breakpoint at %s", mainFile)
-
 	// Try to continue to the breakpoint
+	t.Log("Continuing execution to breakpoint...")
 	state, err := dbg.Continue()
 	if err != nil {
 		t.Errorf("Error: Continue operation reported error: %v", err)
 	} else {
-		// Log where we stopped
 		t.Logf("Stopped at %s:%d", state.CurrentThread.File, state.CurrentThread.Line)
 
 		// Step over the instrumentation code
@@ -200,7 +204,5 @@ func TestDelveDebugger(t *testing.T) {
 		}
 	}
 
-	// The basic success criteria for this test is just that we got this far
-	// without any fatal errors. The detailed inspections are logged but optional.
 	t.Logf("Basic Delve integration test completed")
 }

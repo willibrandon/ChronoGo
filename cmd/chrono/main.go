@@ -16,6 +16,9 @@ import (
 	"github.com/willibrandon/ChronoGo/pkg/replay"
 )
 
+// testMode is set through linker flag in test builds
+var testMode = "false"
+
 // Define a custom usage function to show detailed help
 func printUsage() {
 	fmt.Println("ChronoGo Time-Travel Debugger")
@@ -106,7 +109,30 @@ func main() {
 	eventsFileFlag := flag.String("events", "chronogo.events", "Path to the events file")
 	replayModeFlag := flag.Bool("replay", false, "Run in replay mode only (no execution)")
 	helpFlag := flag.Bool("help", false, "Show help message")
+	testFlag := flag.Bool("test", false, "Run in test mode (for integration tests)")
 	flag.Parse()
+
+	// Check for test mode - this is used by the test suite
+	if *testFlag || testMode == "true" {
+		fmt.Println("Running in test mode - executing testFunction directly")
+		// Initialize instrumentation
+		rec := recorder.NewInMemoryRecorder()
+		instrumentation.InitInstrumentation(rec)
+
+		// Run testFunction() and sleep briefly to allow debugger to connect
+		time.Sleep(500 * time.Millisecond)
+		result := testFunction()
+		fmt.Printf("Test function result: %d\n", result)
+
+		// Print the recorded events
+		events := rec.GetEvents()
+		fmt.Printf("Recorded %d events in test mode\n", len(events))
+
+		// Keep the process running for a while to allow debugging
+		fmt.Println("Test mode - waiting for debugger interactions...")
+		time.Sleep(30 * time.Second)
+		return
+	}
 
 	// If help flag is explicitly set, show usage and exit
 	if *helpFlag {

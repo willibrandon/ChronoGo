@@ -95,9 +95,9 @@ func TestDelveDebugger(t *testing.T) {
 		}
 
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command(goBinary, "build", "-o", binaryPath, "./cmd/chrono")
+			cmd = exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "./cmd/chrono")
 		} else {
-			cmd = exec.Command(goBinary, "build", "-o", binaryPath, "./cmd/chrono")
+			cmd = exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "./cmd/chrono")
 		}
 
 		output, err := cmd.CombinedOutput()

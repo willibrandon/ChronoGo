@@ -19,11 +19,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Set TAR_OPTIONS to prevent "Cannot open: File exists" errors
-    - name: Configure tar options
-      run: echo "TAR_OPTIONS=--warning=no-unknown-keyword --warning=no-existing-file --warning=no-file-changed" >> $GITHUB_ENV
-      if: runner.os == 'macOS' || runner.os == 'Linux'
-
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
@@ -57,11 +52,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      # Set TAR_OPTIONS to prevent "Cannot open: File exists" errors
-      - name: Configure tar options
-        run: echo "TAR_OPTIONS=--warning=no-unknown-keyword --warning=no-existing-file --warning=no-file-changed" >> $GITHUB_ENV
-        if: runner.os == 'macOS' || runner.os == 'Linux'
 
       - name: Set up Go
         uses: actions/setup-go@v4

@@ -131,19 +131,10 @@ func TestDelveDebugger(t *testing.T) {
 		t.Fatalf("Source file not found at %s", mainFile)
 	}
 
-	// Try setting the breakpoint - try a few common line numbers where x := 42 might be
-	var breakpointErr error
-
-	// We'll try a few line numbers near where testFunction might be defined
-	for _, lineNum := range []int{23, 42, 45, 270} {
-		_, breakpointErr = dbg.SetBreakpoint(mainFile, lineNum)
-		if breakpointErr == nil {
-			break // Found a valid breakpoint
-		}
-	}
-
+	// Set a breakpoint at the testFunction entry point
+	_, breakpointErr := dbg.SetFunctionBreakpoint("main.testFunction")
 	if breakpointErr != nil {
-		t.Errorf("Error: Failed to set any breakpoint: %v", breakpointErr)
+		t.Errorf("Error: Failed to set function breakpoint: %v", breakpointErr)
 	}
 
 	t.Logf("Set breakpoint at %s", mainFile)
@@ -156,23 +147,55 @@ func TestDelveDebugger(t *testing.T) {
 		// Log where we stopped
 		t.Logf("Stopped at %s:%d", state.CurrentThread.File, state.CurrentThread.Line)
 
-		// Try to step
+		// Step over the instrumentation code
 		stepState, stepErr := dbg.Step()
 		if stepErr != nil {
 			t.Errorf("Error: Step operation reported error: %v", stepErr)
 		} else {
 			t.Logf("After step, now at %s:%d", stepState.CurrentThread.File, stepState.CurrentThread.Line)
+		}
 
-			// Try getting variables, but don't fail the test if it doesn't work
-			v, varErr := dbg.GetVariable("x")
-			if varErr != nil {
-				t.Errorf("Error: Could not get variable 'x': %v", varErr)
-			} else {
-				t.Logf("Variable x = %s", v.Value)
-				// Only assert equality if we got the variable
-				if v.Value != "42" {
-					t.Logf("Note: Expected x to be 42, got %s", v.Value)
-				}
+		// Step over the instrumentation code again
+		stepState, stepErr = dbg.Step()
+		if stepErr != nil {
+			t.Errorf("Error: Second step operation reported error: %v", stepErr)
+		} else {
+			t.Logf("After second step, now at %s:%d", stepState.CurrentThread.File, stepState.CurrentThread.Line)
+		}
+
+		// Step over the defer block
+		stepState, stepErr = dbg.Step()
+		if stepErr != nil {
+			t.Errorf("Error: Third step operation reported error: %v", stepErr)
+		} else {
+			t.Logf("After third step, now at %s:%d", stepState.CurrentThread.File, stepState.CurrentThread.Line)
+		}
+
+		// Step over the defer function body
+		stepState, stepErr = dbg.Step()
+		if stepErr != nil {
+			t.Errorf("Error: Fourth step operation reported error: %v", stepErr)
+		} else {
+			t.Logf("After fourth step, now at %s:%d", stepState.CurrentThread.File, stepState.CurrentThread.Line)
+		}
+
+		// Step over the closing brace of defer
+		stepState, stepErr = dbg.Step()
+		if stepErr != nil {
+			t.Errorf("Error: Fifth step operation reported error: %v", stepErr)
+		} else {
+			t.Logf("After fifth step, now at %s:%d", stepState.CurrentThread.File, stepState.CurrentThread.Line)
+		}
+
+		// Now we should be at x := 42
+		x, err := dbg.GetVariable("x")
+		if err != nil {
+			t.Errorf("Error: Could not get variable 'x': %v", err)
+		} else {
+			t.Logf("Variable x = %s", x.Value)
+			// Only assert equality if we got the variable
+			if x.Value != "42" {
+				t.Logf("Note: Expected x to be 42, got %s", x.Value)
 			}
 		}
 	}

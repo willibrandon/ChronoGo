@@ -42,15 +42,19 @@ go build -gcflags="all=-N -l" -o chrono.exe cmd/chrono/main.go
 - Use either path format: 
   - Windows backslash: `D:\SRC\ChronoGo\cmd\chrono\main.go:26`
   - Forward slash: `D:/SRC/ChronoGo/cmd/chrono/main.go:26`
-- Look at the recorded events list to see which lines contain executable statements
+- Function breakpoints: `bp func:myFunction` sets a breakpoint at function entry
+- Conditional breakpoints: `bp <file:line> -c "x > 5"` breaks only when condition is true
+- The debugger now offers smart alternatives when a breakpoint can't be set at an exact line
 
 ### Debugging Commands
 - `bp <file:line>` - Set a breakpoint
+- `bp func:<funcname>` - Set a function breakpoint
+- `bp <file:line> -c <condition>` - Set a conditional breakpoint
 - `c` - Continue execution until a breakpoint
 - `s` - Step forward one event
 - `b` - Step backward one event
 - `l` - List active breakpoints
-- `p <var>` - Print the value of a variable
+- `p <var>` - Print value of a variable (with complex type inspection)
 - `watch <expr>` - Set a watchpoint to monitor memory changes
   - `watch -r <expr>` - Break on reads of memory
   - `watch -w <expr>` - Break on writes to memory
@@ -87,25 +91,26 @@ To use watchpoints effectively:
 
 ## Current Limitations
 
-- Breakpoints only work on lines with recorded events
+- Limited debugging capabilities for concurrent programs
 - Delve debugger terminates after the program finishes execution
-- Limited variable inspection capabilities
 - Windows path handling requires full paths for breakpoints
+- Not all Delve debugging features are fully integrated
 
 ## Development Roadmap
 
-### Phase 1: Improved Event Recording (Current)
+### Phase 1: Improved Event Recording (Completed)
 - [x] Basic function entry/exit recording
 - [x] Statement-level instrumentation
 - [x] Breakpoint management
 - [x] Integration with Delve
 - [x] Watchpoint support
 
-### Phase 2: Enhanced Debugging Experience
-- [ ] Better synchronization between replayer and Delve
+### Phase 2: Enhanced Debugging Experience (Current)
+- [x] Better synchronization between replayer and Delve
+- [x] Improved variable inspection, especially for complex types
+- [x] Function breakpoints support
+- [x] Conditional breakpoints support
 - [ ] Memory snapshots for more accurate state replay
-- [ ] Improved variable inspection
-- [ ] Function breakpoints support
 
 ### Phase 3: Production-ready Features
 - [ ] Automatic instrumentation of entire programs

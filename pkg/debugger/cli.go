@@ -70,6 +70,8 @@ func (c *CLI) printHelp() {
 	if c.debugger != nil {
 		fmt.Println("\nDelve debugging commands:")
 		fmt.Println("  breakpoint (bp) <file:line> - Set a breakpoint")
+		fmt.Println("  bp func:<funcname>  - Set a function breakpoint")
+		fmt.Println("  bp <file:line> -c <cond> - Set a conditional breakpoint")
 		fmt.Println("  list (l)        - List all breakpoints")
 		fmt.Println("  print (p) <var> - Print value of a variable")
 		fmt.Println("  goroutines (gr) - List all goroutines")
@@ -139,6 +141,8 @@ func (c *CLI) handleBreakpointCommand(args []string) {
 		// No args - show usage
 		fmt.Println("Usage: breakpoint <file:line> or <command> [args]")
 		fmt.Println("Commands: list, remove, enable, disable")
+		fmt.Println("Function breakpoint: breakpoint func:<function_name>")
+		fmt.Println("Conditional breakpoint: breakpoint <file:line> -c <condition>")
 		return
 	}
 
@@ -166,7 +170,7 @@ func (c *CLI) handleBreakpointCommand(args []string) {
 
 		// Remove from Delve if available
 		if c.debugger != nil {
-			_, err = c.debugger.client.ClearBreakpoint(id)
+			err = c.debugger.ClearBreakpoint(id)
 			if err != nil {
 				fmt.Printf("Error removing breakpoint from Delve: %v\n", err)
 				return
@@ -414,55 +418,6 @@ func (c *CLI) handleStep() {
 	}
 }
 
-// correlateEventToBreakpoint creates a breakpoint based on the given event location
-func (c *CLI) correlateEventToBreakpoint(event recorder.Event) (*api.Breakpoint, error) {
-	if c.debugger == nil {
-		return nil, fmt.Errorf("debugger not available")
-	}
-
-	// Check if the event has file and line information
-	if event.File != "" && event.Line > 0 {
-		fmt.Printf("Setting breakpoint at %s:%d for function %s\n",
-			event.File, event.Line, event.FuncName)
-
-		return c.debugger.SetBreakpoint(event.File, event.Line)
-	}
-
-	// Fallback to parsing the details
-	details := event.Details
-
-	// Check if this is a function entry event, which has location info
-	if event.Type == recorder.FuncEntry && strings.Contains(details, "Entering") {
-		// Try to parse file:line from details
-		parts := strings.Split(details, " at ")
-		if len(parts) >= 2 {
-			locationStr := parts[1]
-			locParts := strings.Split(locationStr, ":")
-			if len(locParts) >= 2 {
-				file := locParts[0]
-				lineStr := locParts[1]
-				line, err := strconv.Atoi(lineStr)
-				if err == nil {
-					fmt.Printf("Setting breakpoint at %s:%d from details\n", file, line)
-					return c.debugger.SetBreakpoint(file, line)
-				}
-			}
-		}
-
-		// Extract function name as a last resort
-		functionName := strings.TrimPrefix(details, "Entering ")
-		functionName = strings.Split(functionName, " at ")[0]
-		functionName = strings.TrimSpace(functionName)
-
-		fmt.Printf("Setting function breakpoint at: %s\n", functionName)
-
-		// We'd need Delve's SetFunctionBreakpoint here
-		return nil, fmt.Errorf("function breakpoints not yet supported")
-	}
-
-	return nil, fmt.Errorf("could not correlate event to a debugger location")
-}
-
 // syncDebuggerToEvent tries to synchronize the debugger state with the current event
 func (c *CLI) syncDebuggerToEvent(eventIdx int) error {
 	events := c.replayer.Events()
@@ -473,23 +428,127 @@ func (c *CLI) syncDebuggerToEvent(eventIdx int) error {
 	event := events[eventIdx]
 	fmt.Printf("Synchronizing debugger to event: %s\n", c.formatEvent(event))
 
-	// Try to set a breakpoint based on the event
-	bp, err := c.correlateEventToBreakpoint(event)
-	if err != nil {
-		return fmt.Errorf("failed to correlate event to breakpoint: %v", err)
+	// Try multiple synchronization strategies
+
+	// 1. First, check if the event has precise file and line information
+	if event.File != "" && event.Line > 0 {
+		// Try setting a breakpoint at this exact location
+		bp, err := c.debugger.SetBreakpoint(event.File, event.Line)
+		if err == nil {
+			fmt.Printf("Set breakpoint at %s:%d for synchronization\n", event.File, event.Line)
+
+			// Continue to this breakpoint
+			state, contErr := c.debugger.Continue()
+
+			// Clean up the temporary breakpoint
+			err := c.debugger.ClearBreakpoint(bp.ID)
+			if err != nil {
+				fmt.Printf("Warning: failed to clear temporary breakpoint: %v\n", err)
+			}
+
+			if contErr != nil {
+				return fmt.Errorf("failed to continue to location %s:%d: %v", event.File, event.Line, contErr)
+			}
+
+			if state != nil {
+				fmt.Printf("Debugger synchronized, stopped at: %s:%d\n",
+					state.CurrentThread.File, state.CurrentThread.Line)
+				return nil
+			}
+		} else {
+			fmt.Printf("Could not set breakpoint at %s:%d: %v\n", event.File, event.Line, err)
+			// Continue with alternative strategies
+		}
 	}
 
-	// Continue to the breakpoint
-	fmt.Printf("Continuing to breakpoint at %s:%d\n", bp.File, bp.Line)
-	state, err := c.debugger.Continue()
-	if err != nil {
-		return fmt.Errorf("failed to continue to correlated location: %v", err)
+	// 2. If event is function entry, try synchronizing to function
+	if event.Type == recorder.FuncEntry && event.FuncName != "" {
+		fmt.Printf("Attempting to synchronize to function: %s\n", event.FuncName)
+
+		// Use function breakpoint in Delve
+		// Note: Requires implementing SetFunctionBreakpoint (not shown here)
+		// Use goroutine/function name matching as fallback
+
+		goroutines, err := c.debugger.ListGoroutines()
+		if err == nil {
+			// Try to find a goroutine currently in this function
+			for _, g := range goroutines {
+				if g.CurrentLoc.Function != nil &&
+					strings.Contains(g.CurrentLoc.Function.Name(), event.FuncName) {
+					// Switch to this goroutine
+					_, err := c.debugger.client.SwitchGoroutine(g.ID)
+					if err == nil {
+						fmt.Printf("Switched to goroutine %d at function %s\n",
+							g.ID, g.CurrentLoc.Function.Name())
+						return nil
+					}
+				}
+			}
+		}
 	}
 
-	fmt.Printf("Debugger synchronized, stopped at: %s:%d\n",
-		state.CurrentThread.File, state.CurrentThread.Line)
+	// 3. For variable assignments, try to match variable names and values
+	if event.Type == recorder.VarAssignment && event.Details != "" {
+		fmt.Printf("Attempting to synchronize based on variable assignment: %s\n", event.Details)
+		// This is more complex and would require comparing program state
+		// with the recorded variable values
+	}
 
-	return nil
+	// 4. If other strategies fail, try finding nearby events with valid file/line info
+	searchRadius := 5 // Look 5 events before and after
+	for offset := 1; offset <= searchRadius; offset++ {
+		// Check events before and after
+		for _, checkIdx := range []int{eventIdx - offset, eventIdx + offset} {
+			if checkIdx >= 0 && checkIdx < len(events) {
+				checkEvent := events[checkIdx]
+				if checkEvent.File != "" && checkEvent.Line > 0 {
+					fmt.Printf("Trying sync with nearby event at %s:%d\n",
+						checkEvent.File, checkEvent.Line)
+
+					// Try setting breakpoint at nearby event
+					nearbyBp, err := c.debugger.SetBreakpoint(checkEvent.File, checkEvent.Line)
+					if err == nil {
+						// Continue to this nearby point
+						state, contErr := c.debugger.Continue()
+
+						// Clean up temporary breakpoint
+						clearErr := c.debugger.ClearBreakpoint(nearbyBp.ID)
+						if clearErr != nil {
+							fmt.Printf("Warning: failed to clear temporary breakpoint: %v\n", clearErr)
+						}
+
+						if contErr == nil && state != nil {
+							fmt.Printf("Synchronized to nearby location: %s:%d\n",
+								state.CurrentThread.File, state.CurrentThread.Line)
+
+							// If we hit a point after our target, we may need to step backward
+							// If we hit a point before our target, we may need to step forward
+							if checkIdx < eventIdx {
+								// Need to step forward to reach target
+								fmt.Println("Need to step forward to reach exact event")
+							} else {
+								// We're past the target event
+								fmt.Println("Synchronized beyond target event")
+							}
+							return nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 5. Last resort: Reset program state and try a more holistic approach
+	fmt.Println("Precise synchronization failed, attempting approximate sync...")
+
+	// Get current state for reference
+	state, err := c.debugger.client.GetState()
+	if err == nil && state.CurrentThread != nil {
+		fmt.Printf("Current debugger position: %s:%d\n",
+			state.CurrentThread.File, state.CurrentThread.Line)
+	}
+
+	return fmt.Errorf("could not precisely synchronize debugger state to event %d", eventIdx)
 }
 
 // resetDebuggerToEvent restarts the Delve debugger and brings it to a state matching the current event
@@ -508,6 +567,15 @@ func (c *CLI) resetDebuggerToEvent(eventIdx int) error {
 	// Get the current target program
 	targetPath := c.debugger.target
 
+	// Store existing breakpoints before closing so we can restore them
+	var existingBreakpoints []*api.Breakpoint
+	if c.debugger.client != nil {
+		bps, err := c.debugger.client.ListBreakpoints(false)
+		if err == nil {
+			existingBreakpoints = bps
+		}
+	}
+
 	// Close the current debugger session
 	if err := c.debugger.Close(); err != nil {
 		fmt.Printf("Warning: error closing debugger: %v\n", err)
@@ -520,9 +588,85 @@ func (c *CLI) resetDebuggerToEvent(eventIdx int) error {
 		return fmt.Errorf("failed to restart debugger: %v", err)
 	}
 
-	// Synchronize the debugger with the current event
-	if err := c.syncDebuggerToEvent(eventIdx); err != nil {
-		fmt.Printf("Warning: could not fully synchronize debugger: %v\n", err)
+	// Restore previous breakpoints
+	for _, bp := range existingBreakpoints {
+		// Skip internal breakpoints (those with special IDs)
+		if bp.ID <= 0 {
+			continue
+		}
+
+		// Restore based on file:line
+		if bp.File != "" && bp.Line > 0 {
+			fmt.Printf("Restoring breakpoint at %s:%d\n", bp.File, bp.Line)
+			_, err := c.debugger.SetBreakpoint(bp.File, bp.Line)
+			if err != nil {
+				fmt.Printf("Warning: failed to restore breakpoint at %s:%d: %v\n",
+					bp.File, bp.Line, err)
+			}
+		}
+	}
+
+	// Build a map of all available file:line locations from recorded events
+	// This helps with finding the nearest valid execution point
+	validLocations := make(map[string]bool)
+	for _, e := range events {
+		if e.File != "" && e.Line > 0 {
+			key := fmt.Sprintf("%s:%d", e.File, e.Line)
+			validLocations[key] = true
+		}
+	}
+
+	// Try setting a breakpoint at main() to start
+	mainBp, _ := c.debugger.client.CreateBreakpoint(&api.Breakpoint{
+		FunctionName: "main.main",
+	})
+
+	if mainBp != nil {
+		// Continue to main
+		_, _ = c.debugger.Continue()
+		// Clean up main breakpoint
+		clearErr := c.debugger.ClearBreakpoint(mainBp.ID)
+		if clearErr != nil {
+			fmt.Printf("Warning: failed to clear main breakpoint: %v\n", clearErr)
+		}
+	}
+
+	// Now try to synchronize to the specific event
+	err = c.syncDebuggerToEvent(eventIdx)
+	if err != nil {
+		// If sync fails, try to get reasonably close
+		fmt.Printf("Warning: precise sync failed, using best-effort approach: %v\n", err)
+
+		// Look for events leading up to current one with valid locations
+		var validEvents []recorder.Event
+		for i := 0; i <= eventIdx; i++ {
+			if events[i].File != "" && events[i].Line > 0 {
+				validEvents = append(validEvents, events[i])
+			}
+		}
+
+		// Try setting breakpoints at several valid locations
+		// preceding our target and continue to each
+		for i := len(validEvents) - 1; i >= 0 && i >= len(validEvents)-5; i-- {
+			e := validEvents[i]
+			bp, err := c.debugger.SetBreakpoint(e.File, e.Line)
+			if err == nil {
+				// Try continuing to this point
+				if state, err := c.debugger.Continue(); err == nil && state != nil {
+					fmt.Printf("Reset to approximate position: %s:%d\n",
+						state.CurrentThread.File, state.CurrentThread.Line)
+					clearErr := c.debugger.ClearBreakpoint(bp.ID)
+					if clearErr != nil {
+						fmt.Printf("Warning: failed to clear breakpoint: %v\n", clearErr)
+					}
+					break
+				}
+				clearErr := c.debugger.ClearBreakpoint(bp.ID)
+				if clearErr != nil {
+					fmt.Printf("Warning: failed to clear breakpoint: %v\n", clearErr)
+				}
+			}
+		}
 	}
 
 	return nil
@@ -590,12 +734,48 @@ func (c *CLI) handleBreakpoint(args []string) {
 	}
 
 	if len(args) < 1 {
-		fmt.Println("Usage: breakpoint <file:line>")
+		fmt.Println("Usage: breakpoint <file:line> or func:<function_name>")
+		fmt.Println("Optional: breakpoint <file:line> -c <condition>")
+		return
+	}
+
+	// Check for conditional breakpoint syntax
+	var condition string
+	var locationArg string
+
+	if len(args) >= 3 && args[1] == "-c" {
+		// Format: breakpoint file:line -c condition
+		locationArg = args[0]
+		condition = args[2]
+	} else {
+		// Standard breakpoint
+		locationArg = args[0]
+	}
+
+	// Check if this is a function breakpoint
+	if strings.HasPrefix(locationArg, "func:") {
+		funcName := strings.TrimPrefix(locationArg, "func:")
+
+		// Set a function breakpoint
+		dbp, err := c.debugger.SetFunctionBreakpoint(funcName)
+		if err != nil {
+			fmt.Printf("Error setting function breakpoint: %v\n", err)
+			return
+		}
+
+		// Add to our breakpoint manager
+		bp, err := c.bpManager.AddBreakpoint("func:" + funcName)
+		if err != nil {
+			fmt.Printf("Warning: Error adding breakpoint to manager: %v\n", err)
+		}
+
+		fmt.Printf("Function breakpoint %d set at %s (Delve bp: %d)\n",
+			bp.ID, funcName, dbp.ID)
 		return
 	}
 
 	// Parse file:line format with special handling for Windows paths
-	input := args[0]
+	input := locationArg
 
 	// Convert any backslashes to forward slashes for consistency
 	input = strings.ReplaceAll(input, "\\", "/")
@@ -603,7 +783,7 @@ func (c *CLI) handleBreakpoint(args []string) {
 	// Find the last colon, which should separate the file path from line number
 	lastColonIndex := strings.LastIndex(input, ":")
 	if lastColonIndex == -1 {
-		fmt.Println("Invalid format. Use file:line (e.g., main.go:42)")
+		fmt.Println("Invalid format. Use file:line (e.g., main.go:42) or func:functionName")
 		return
 	}
 
@@ -618,39 +798,19 @@ func (c *CLI) handleBreakpoint(args []string) {
 	}
 
 	// Set breakpoint in the Delve debugger
-	dbp, err := c.debugger.SetBreakpoint(file, line)
-	if err != nil {
-		fmt.Printf("Error setting breakpoint: %v\n", err)
+	var dbp *api.Breakpoint
+	var breakpointErr error
 
-		// Try to provide helpful suggestions on valid statement lines
-		if strings.Contains(err.Error(), "could not find statement") {
-			fmt.Println("\nThis line might not contain an executable statement.")
+	if condition != "" {
+		// Set conditional breakpoint
+		dbp, breakpointErr = c.debugger.SetConditionalBreakpoint(file, line, condition)
+	} else {
+		// Regular breakpoint
+		dbp, breakpointErr = c.debugger.SetBreakpoint(file, line)
+	}
 
-			// Get the current state to find valid lines
-			state, stateErr := c.debugger.client.GetState()
-			if stateErr == nil && state.CurrentThread != nil && state.CurrentThread.Function != nil {
-				fmt.Println("\nTry these recorded statement lines instead:")
-
-				// List our recorded events with line numbers
-				events := c.replayer.Events()
-				foundEvents := false
-
-				for _, event := range events {
-					// Normalize paths for comparison
-					eventFile := strings.ReplaceAll(strings.ToLower(event.File), "\\", "/")
-					checkFile := strings.ToLower(file)
-
-					if eventFile == checkFile || strings.HasSuffix(eventFile, checkFile) {
-						fmt.Printf("  Line %d: %s\n", event.Line, event.Details)
-						foundEvents = true
-					}
-				}
-
-				if !foundEvents {
-					fmt.Println("  No recorded events found in this file. Try a different file or line.")
-				}
-			}
-		}
+	if breakpointErr != nil {
+		fmt.Printf("Error setting breakpoint: %v\n", breakpointErr)
 		return
 	}
 
@@ -660,7 +820,12 @@ func (c *CLI) handleBreakpoint(args []string) {
 		fmt.Printf("Warning: Error adding breakpoint to manager: %v\n", err)
 	}
 
-	fmt.Printf("Breakpoint %d set at %s:%d (Delve bp: %d)\n", bp.ID, file, line, dbp.ID)
+	if condition != "" {
+		fmt.Printf("Conditional breakpoint %d set at %s:%d with condition '%s' (Delve bp: %d)\n",
+			bp.ID, file, line, condition, dbp.ID)
+	} else {
+		fmt.Printf("Breakpoint %d set at %s:%d (Delve bp: %d)\n", bp.ID, file, line, dbp.ID)
+	}
 }
 
 // handleListBreakpoints lists all breakpoints

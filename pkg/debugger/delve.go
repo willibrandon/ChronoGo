@@ -5,6 +5,7 @@ import (
 	"net"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
@@ -112,8 +113,9 @@ func (d *DelveDebugger) SetBreakpoint(file string, line int) (*api.Breakpoint, e
 		return createdBp, nil
 	}
 
-	// If exact match failed, try finding closest line with a statement
-	// This can help when debugging code with optimizations or go run issues
+	// If exact match failed, try more strategies
+
+	// 1. Try finding closest line with a statement
 	if strings.Contains(err.Error(), "could not find statement") {
 		// Try searching for the source file
 		sources, locErr := d.client.ListSources(file)
@@ -126,10 +128,9 @@ func (d *DelveDebugger) SetBreakpoint(file string, line int) (*api.Breakpoint, e
 					Line: line + offset,
 				}
 				if nearByCreated, nearbyErr := d.client.CreateBreakpoint(nearbyBp); nearbyErr == nil {
-					// Found a valid line nearby - remove it immediately since we're just testing
-					_, _ = d.client.ClearBreakpoint(nearByCreated.ID)
-					return nil, fmt.Errorf("%v\nTry line %d instead, which contains an executable statement",
-						err, line+offset)
+					fmt.Printf("Successfully set breakpoint at alternative line %d instead of %d\n",
+						line+offset, line)
+					return nearByCreated, nil
 				}
 
 				// Try line - offset if it's positive
@@ -139,18 +140,152 @@ func (d *DelveDebugger) SetBreakpoint(file string, line int) (*api.Breakpoint, e
 						Line: line - offset,
 					}
 					if nearByCreated, nearbyErr := d.client.CreateBreakpoint(nearbyBp); nearbyErr == nil {
-						// Found a valid line nearby - remove it immediately since we're just testing
-						_, _ = d.client.ClearBreakpoint(nearByCreated.ID)
-						return nil, fmt.Errorf("%v\nTry line %d instead, which contains an executable statement",
-							err, line-offset)
+						fmt.Printf("Successfully set breakpoint at alternative line %d instead of %d\n",
+							line-offset, line)
+						return nearByCreated, nil
 					}
 				}
 			}
+
+			// If we still haven't found a suitable line, provide more detailed suggestions
+			return nil, fmt.Errorf("%v\nTry one of these lines instead, which might contain executable statements: %d, %d, %d",
+				err, line+1, line+2, line-1)
 		}
 	}
 
-	// If we couldn't find any alternatives, return the original error
-	return nil, err
+	// 2. Check for file path discrepancies (common in Go module builds)
+	if strings.Contains(err.Error(), "no file") || strings.Contains(err.Error(), "does not exist") {
+		// Get list of all sources
+		sources, listErr := d.client.ListSources("")
+		if listErr != nil {
+			return nil, fmt.Errorf("failed to list sources: %v (original error: %v)", listErr, err)
+		}
+
+		// Check for basename matches
+		baseName := filepath.Base(file)
+		var matchingFiles []string
+		for _, src := range sources {
+			if filepath.Base(src) == baseName {
+				matchingFiles = append(matchingFiles, src)
+			}
+		}
+
+		// Try setting breakpoint with matching file paths
+		for _, matchFile := range matchingFiles {
+			alternativeBp := &api.Breakpoint{
+				File: matchFile,
+				Line: line,
+			}
+			if altCreated, altErr := d.client.CreateBreakpoint(alternativeBp); altErr == nil {
+				fmt.Printf("Successfully set breakpoint using alternative path %s\n", matchFile)
+				return altCreated, nil
+			}
+		}
+
+		if len(matchingFiles) > 0 {
+			return nil, fmt.Errorf("%v\nTried alternative files: %v, but couldn't set breakpoint",
+				err, matchingFiles)
+		}
+	}
+
+	// 3. Try setting a function breakpoint if we can determine the function name
+	// This would require parsing the source file or using other methods to determine
+	// which function contains the given line number
+
+	// If all strategies failed, return the original error
+	return nil, fmt.Errorf("could not set breakpoint at %s:%d: %v", file, line, err)
+}
+
+// SetFunctionBreakpoint sets a breakpoint at a function
+func (d *DelveDebugger) SetFunctionBreakpoint(funcName string) (*api.Breakpoint, error) {
+	// Create a breakpoint specification targeting the function
+	bp := &api.Breakpoint{
+		FunctionName: funcName,
+	}
+
+	// Try to create the breakpoint
+	createdBp, err := d.client.CreateBreakpoint(bp)
+	if err == nil {
+		return createdBp, nil
+	}
+
+	// If the exact function name didn't work, try with package prefix variations
+	if strings.Contains(err.Error(), "could not find function") {
+		// Try with common package prefix variations
+		prefixes := []string{
+			"main.", // Most common
+			"runtime.",
+			"github.com/",
+		}
+
+		for _, prefix := range prefixes {
+			if !strings.HasPrefix(funcName, prefix) {
+				altFuncName := prefix + funcName
+				altBp := &api.Breakpoint{
+					FunctionName: altFuncName,
+				}
+
+				if altCreated, altErr := d.client.CreateBreakpoint(altBp); altErr == nil {
+					fmt.Printf("Successfully set breakpoint at function %s\n", altFuncName)
+					return altCreated, nil
+				}
+			}
+		}
+
+		// If we still haven't found the function, try to list available functions
+		funcs, _ := d.client.ListFunctions(funcName, 10) // Limit to 10 matching functions
+		if len(funcs) > 0 {
+			suggestions := funcs
+			if len(suggestions) > 5 {
+				suggestions = suggestions[:5] // Limit to 5 suggestions
+			}
+
+			return nil, fmt.Errorf("%v\nDid you mean one of these functions?\n%s",
+				err, strings.Join(suggestions, "\n"))
+		}
+	}
+
+	return nil, fmt.Errorf("could not set breakpoint at function %s: %v", funcName, err)
+}
+
+// SetConditionalBreakpoint sets a breakpoint with a condition
+func (d *DelveDebugger) SetConditionalBreakpoint(file string, line int, condition string) (*api.Breakpoint, error) {
+	// Normalize file path
+	file = filepath.ToSlash(file)
+
+	// Create the breakpoint with condition
+	bp := &api.Breakpoint{
+		File: file,
+		Line: line,
+		Cond: condition,
+	}
+
+	// Try to create the breakpoint
+	createdBp, err := d.client.CreateBreakpoint(bp)
+	if err != nil {
+		// If the breakpoint location is valid but the condition is invalid
+		if strings.Contains(err.Error(), "condition") {
+			return nil, fmt.Errorf("invalid condition '%s': %v", condition, err)
+		}
+
+		// Otherwise, try the regular breakpoint setting logic
+		regularBp, regularErr := d.SetBreakpoint(file, line)
+		if regularErr != nil {
+			return nil, fmt.Errorf("could not set conditional breakpoint: %v", regularErr)
+		}
+
+		// If we could set a regular breakpoint, try to amend it with the condition
+		regularBp.Cond = condition
+		if amendErr := d.client.AmendBreakpoint(regularBp); amendErr != nil {
+			// Clean up the regular breakpoint if we can't make it conditional
+			_, _ = d.client.ClearBreakpoint(regularBp.ID)
+			return nil, fmt.Errorf("could set breakpoint but failed to add condition: %v", amendErr)
+		}
+
+		return regularBp, nil
+	}
+
+	return createdBp, nil
 }
 
 // ClearBreakpoint removes a breakpoint by its ID using RPC
@@ -209,7 +344,7 @@ func (d *DelveDebugger) GetVariable(name string) (*api.Variable, error) {
 		Frame:       0,
 	}
 
-	// Standard load config
+	// Customize load config based on variable type detection
 	cfg := api.LoadConfig{
 		FollowPointers:     true,
 		MaxVariableRecurse: 1,
@@ -223,13 +358,14 @@ func (d *DelveDebugger) GetVariable(name string) (*api.Variable, error) {
 	// 1. Direct evaluation
 	v, err := d.client.EvalVariable(scope, name, cfg)
 	if err == nil {
-		return v, nil
+		// Detect if this is a complex type and customize loading
+		return d.loadComplexVariable(v, scope)
 	}
 
 	// 2. Alternate syntax (.name)
 	v, err = d.client.EvalVariable(scope, fmt.Sprintf(".%s", name), cfg)
 	if err == nil {
-		return v, nil
+		return d.loadComplexVariable(v, scope)
 	}
 
 	// 3. Try manually listing local variables
@@ -237,11 +373,12 @@ func (d *DelveDebugger) GetVariable(name string) (*api.Variable, error) {
 	if err == nil {
 		for _, local := range locals {
 			if local.Name == name {
-				return &api.Variable{
+				v := &api.Variable{
 					Name:  local.Name,
 					Value: local.Value,
 					Type:  local.Type,
-				}, nil
+				}
+				return d.loadComplexVariable(v, scope)
 			}
 		}
 	}
@@ -251,17 +388,93 @@ func (d *DelveDebugger) GetVariable(name string) (*api.Variable, error) {
 	if err == nil {
 		for _, arg := range args {
 			if arg.Name == name {
-				return &api.Variable{
+				v := &api.Variable{
 					Name:  arg.Name,
 					Value: arg.Value,
 					Type:  arg.Type,
-				}, nil
+				}
+				return d.loadComplexVariable(v, scope)
 			}
 		}
 	}
 
 	// If all attempts fail, provide a clearer message
 	return nil, fmt.Errorf("failed to evaluate variable '%s': could not find symbol value for %s", name, name)
+}
+
+// loadComplexVariable provides enhanced loading for complex variable types
+func (d *DelveDebugger) loadComplexVariable(v *api.Variable, scope api.EvalScope) (*api.Variable, error) {
+	// Already loaded simple types can be returned as-is
+	if v.Kind == reflect.Bool || v.Kind == reflect.Int || v.Kind == reflect.Float64 ||
+		v.Kind == reflect.String || v.Kind == reflect.Float32 || v.Kind == reflect.Int8 ||
+		v.Kind == reflect.Int16 || v.Kind == reflect.Int32 || v.Kind == reflect.Int64 ||
+		v.Kind == reflect.Uint || v.Kind == reflect.Uint8 || v.Kind == reflect.Uint16 ||
+		v.Kind == reflect.Uint32 || v.Kind == reflect.Uint64 || v.Kind == reflect.Uintptr {
+		return v, nil
+	}
+
+	// Create type-specific loading configurations
+	var cfg api.LoadConfig
+
+	switch v.Kind {
+	case reflect.Struct:
+		// For structs, load all fields
+		cfg = api.LoadConfig{
+			FollowPointers:     true,
+			MaxVariableRecurse: 1,
+			MaxStringLen:       64,
+			MaxArrayValues:     0,  // Don't load arrays within structs by default
+			MaxStructFields:    -1, // Load all struct fields
+		}
+	case reflect.Slice, reflect.Array:
+		// For slices/arrays, load more elements but limit recursion
+		cfg = api.LoadConfig{
+			FollowPointers:     true,
+			MaxVariableRecurse: 0, // Don't follow pointers in array elements by default
+			MaxStringLen:       32,
+			MaxArrayValues:     100, // Show more array elements
+			MaxStructFields:    -1,
+		}
+	case reflect.Map:
+		// For maps, load more key/values
+		cfg = api.LoadConfig{
+			FollowPointers:     true,
+			MaxVariableRecurse: 1,
+			MaxStringLen:       32,
+			MaxArrayValues:     100, // More map entries
+			MaxStructFields:    -1,
+		}
+	case reflect.Ptr, reflect.Interface:
+		// For pointers, increase recursion
+		cfg = api.LoadConfig{
+			FollowPointers:     true,
+			MaxVariableRecurse: 2, // Follow deeper
+			MaxStringLen:       64,
+			MaxArrayValues:     64,
+			MaxStructFields:    -1,
+		}
+	case reflect.Chan:
+		// For channels, try to examine buffer and structure
+		cfg = api.LoadConfig{
+			FollowPointers:     true,
+			MaxVariableRecurse: 1,
+			MaxStringLen:       64,
+			MaxArrayValues:     32, // Show buffered channel elements
+			MaxStructFields:    -1,
+		}
+	default:
+		// Default config for other types
+		cfg = api.LoadConfig{
+			FollowPointers:     true,
+			MaxVariableRecurse: 1,
+			MaxStringLen:       64,
+			MaxArrayValues:     64,
+			MaxStructFields:    -1,
+		}
+	}
+
+	// Re-evaluate with the type-specific config
+	return d.client.EvalVariable(scope, v.Name, cfg)
 }
 
 // ListGoroutines returns all active goroutines using RPC

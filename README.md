@@ -106,10 +106,10 @@ To use watchpoints effectively:
 - [x] Watchpoint support
 
 ### Phase 2: Enhanced Debugging Experience (Current)
-- [x] Better synchronization between replayer and Delve
-- [x] Improved variable inspection, especially for complex types
-- [x] Function breakpoints support
-- [x] Conditional breakpoints support
+- [] Better synchronization between replayer and Delve
+- [] Improved variable inspection, especially for complex types
+- [] Function breakpoints support
+- [] Conditional breakpoints support
 - [ ] Memory snapshots for more accurate state replay
 
 ### Phase 3: Production-ready Features

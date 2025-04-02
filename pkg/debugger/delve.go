@@ -62,8 +62,8 @@ func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
 	}
 	dlvCmd := exec.Command("dlv", cmdArgs...)
 
-	// Prevent dlv from creating a new console window on Windows
-	dlvCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	// Platform-specific process attributes are set in setupProcAttr function
+	setupProcAttr(dlvCmd)
 
 	// Start the Delve headless server
 	if err := dlvCmd.Start(); err != nil {

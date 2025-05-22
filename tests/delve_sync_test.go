@@ -72,11 +72,10 @@ func TestDelveReplayerSynchronization(t *testing.T) {
 
 				// On Windows, try taskkill as a fallback
 				if runtime.GOOS == "windows" {
-					killOutput, _ := exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", cmd.Process.Pid)).CombinedOutput()
-					t.Logf("Taskkill output: %s", string(killOutput))
+					_ = exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", cmd.Process.Pid)).Run()
 				}
 			}
-			cmd.Process.Wait()
+			_, _ = cmd.Process.Wait()
 		}
 	}()
 
@@ -156,11 +155,10 @@ func TestDelveReplayerSynchronization(t *testing.T) {
 
 					// On Windows, try taskkill as a fallback
 					if runtime.GOOS == "windows" {
-						killOutput, _ := exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", dlvCmd.Process.Pid)).CombinedOutput()
-						t.Logf("Taskkill output: %s", string(killOutput))
+						_ = exec.Command("taskkill", "/F", "/PID", fmt.Sprintf("%d", dlvCmd.Process.Pid)).Run()
 					}
 				}
-				dlvCmd.Process.Wait()
+				_, _ = dlvCmd.Process.Wait()
 			}
 
 			// Read and log the output

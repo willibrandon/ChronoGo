@@ -66,9 +66,9 @@ func TestDelveDebugger(t *testing.T) {
 	// Get the path to the test binary
 	var binaryPath string
 	if runtime.GOOS == "windows" {
-		binaryPath = filepath.Join(projectRoot, "chrono.exe")
+		binaryPath = filepath.Join(projectRoot, "chrono_test.exe")
 	} else {
-		binaryPath = filepath.Join(projectRoot, "chrono")
+		binaryPath = filepath.Join(projectRoot, "chrono_test")
 	}
 
 	// Build the binary if it doesn't exist
@@ -84,27 +84,22 @@ func TestDelveDebugger(t *testing.T) {
 			t.Fatalf("Failed to change to project root: %v", err)
 		}
 
-		// Use cross-platform way to build the binary WITH DEBUG INFO
-		var cmd *exec.Cmd
+		// Use cross-platform way to build the binary
 		goBinary, err := exec.LookPath("go")
 		if err != nil {
 			if err := os.Chdir(origDir); err != nil {
-				t.Fatalf("Error: Failed to change back to original directory: %v", err)
+				t.Logf("Warning: Failed to change back to original directory: %v", err)
 			}
 			t.Fatalf("Failed to find go binary: %v", err)
 		}
 
-		// Build with debug info enabled (-gcflags=all=-N -l)
-		if runtime.GOOS == "windows" {
-			cmd = exec.Command(goBinary, "build", "-gcflags=all=-N -l", "-o", binaryPath, "./cmd/chrono")
-		} else {
-			cmd = exec.Command(goBinary, "build", "-gcflags=all=-N -l", "-o", binaryPath, "./cmd/chrono")
-		}
+		// Build with debug info and disable optimizations
+		cmd := exec.Command(goBinary, "build", "-gcflags", "all=-N -l", "-o", binaryPath, "./cmd/chrono")
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			if err := os.Chdir(origDir); err != nil {
-				t.Fatalf("Error: Failed to change back to original directory: %v", err)
+				t.Logf("Warning: Failed to change back to original directory: %v", err)
 			}
 			t.Fatalf("Failed to build binary: %v\nOutput: %s", err, output)
 		}
@@ -112,15 +107,19 @@ func TestDelveDebugger(t *testing.T) {
 		if err := os.Chdir(origDir); err != nil {
 			t.Fatalf("Failed to change back to original directory: %v", err)
 		}
-
-		// Verify binary was built
-		if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-			t.Fatalf("Failed to build binary at %s", binaryPath)
-		}
 	}
 
-	// Create a new Delve debugger
-	dbg, err := debugger.NewDelveDebugger(binaryPath)
+	// Create a temporary events file for the test to use
+	eventsFile, err := os.CreateTemp("", "chronogo-test-*.events")
+	if err != nil {
+		t.Fatalf("Failed to create temporary events file: %v", err)
+	}
+	defer os.Remove(eventsFile.Name())
+	eventsFile.Close()
+
+	// Create a new Delve debugger with arguments that trigger the debug helper function
+	dbgArgs := []string{"-debug"}
+	dbg, err := debugger.NewDelveDebuggerWithArgs(binaryPath, dbgArgs)
 	if err != nil {
 		t.Fatalf("Failed to create Delve debugger: %v", err)
 	}
@@ -134,6 +133,7 @@ func TestDelveDebugger(t *testing.T) {
 	t.Logf("Successfully set breakpoint at %s", bp.FunctionName)
 
 	// Try to continue to the breakpoint
+	t.Log("Continuing execution to breakpoint...")
 	state, err := dbg.Continue()
 	if err != nil {
 		t.Fatalf("Error during continue: %v", err)

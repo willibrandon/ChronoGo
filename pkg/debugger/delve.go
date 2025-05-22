@@ -60,6 +60,8 @@ func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
 		"--listen=" + dlvListenAddr,
 		"--api-version=2",
 		"--accept-multiclient",
+		"--",     // Separator between dlv args and program args
+		"-debug", // Ensure debug functions are called
 	}
 	dlvCmd := exec.Command("dlv", cmdArgs...)
 
@@ -373,12 +375,15 @@ func (d *DelveDebugger) GetVariable(name string) (*api.Variable, error) {
 	if err == nil {
 		for _, local := range locals {
 			if local.Name == name {
-				v := &api.Variable{
-					Name:  local.Name,
-					Value: local.Value,
-					Type:  local.Type,
+				// The Value field might not be populated by ListLocalVariables
+				// Re-evaluate the variable to get the actual value
+				evalVar, evalErr := d.client.EvalVariable(scope, name, cfg)
+				if evalErr == nil {
+					return d.loadComplexVariable(evalVar, scope)
 				}
-				return d.loadComplexVariable(v, scope)
+
+				// If re-evaluation fails, return the original
+				return d.loadComplexVariable(&local, scope)
 			}
 		}
 	}
@@ -388,12 +393,8 @@ func (d *DelveDebugger) GetVariable(name string) (*api.Variable, error) {
 	if err == nil {
 		for _, arg := range args {
 			if arg.Name == name {
-				v := &api.Variable{
-					Name:  arg.Name,
-					Value: arg.Value,
-					Type:  arg.Type,
-				}
-				return d.loadComplexVariable(v, scope)
+				// Return the argument directly instead of creating a new one
+				return d.loadComplexVariable(&arg, scope)
 			}
 		}
 	}

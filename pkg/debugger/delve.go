@@ -37,8 +37,8 @@ func findFreePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// NewDelveDebugger launches a Delve headless server for the target and connects via RPC
-func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
+// NewDelveDebuggerWithArgs launches a Delve headless server for the target with the given command line arguments and connects via RPC
+func NewDelveDebuggerWithArgs(targetPath string, args []string) (*DelveDebugger, error) {
 	// Convert to absolute path
 	absPath, err := filepath.Abs(targetPath)
 	if err != nil {
@@ -52,7 +52,7 @@ func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
 	}
 	dlvListenAddr := "localhost:" + strconv.Itoa(port)
 
-	// Construct the dlv exec command
+	// Construct the dlv exec command with args
 	// Ensure dlv executable is in PATH or provide full path
 	cmdArgs := []string{
 		"exec", absPath,
@@ -63,6 +63,13 @@ func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
 		"--",     // Separator between dlv args and program args
 		"-debug", // Ensure debug functions are called
 	}
+
+	// Only add the '--' separator if we have args to pass
+	if len(args) > 0 {
+		cmdArgs = append(cmdArgs, "--")
+		cmdArgs = append(cmdArgs, args...)
+	}
+
 	dlvCmd := exec.Command("dlv", cmdArgs...)
 
 	// Platform-specific process attributes are set in setupProcAttr function
@@ -72,10 +79,11 @@ func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
 	if err := dlvCmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start delve process: %v", err)
 	}
-	fmt.Printf("Started Delve headless server for %s on %s (PID: %d)\n", absPath, dlvListenAddr, dlvCmd.Process.Pid)
+	fmt.Printf("Started Delve headless server for %s on %s (PID: %d) with args: %v\n",
+		absPath, dlvListenAddr, dlvCmd.Process.Pid, args)
 
-	// Wait a moment for the server to initialize
-	time.Sleep(500 * time.Millisecond) // Adjust timing if needed
+	// Wait a moment for the server to initialize - longer time for testing
+	time.Sleep(1000 * time.Millisecond)
 
 	// Connect the RPC client
 	client := rpc2.NewClient(dlvListenAddr)
@@ -96,6 +104,11 @@ func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
 		dlvCmd:    dlvCmd,
 		dlvListen: dlvListenAddr,
 	}, nil
+}
+
+// NewDelveDebugger launches a Delve headless server for the target and connects via RPC
+func NewDelveDebugger(targetPath string) (*DelveDebugger, error) {
+	return NewDelveDebuggerWithArgs(targetPath, nil)
 }
 
 // SetBreakpoint sets a breakpoint at the specified location using RPC

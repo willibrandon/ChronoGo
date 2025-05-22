@@ -30,7 +30,7 @@ func TestDelveReplayerSynchronization(t *testing.T) {
 			t.Logf("Taskkill output: %s", string(killOutput))
 		} else {
 			// Use pkill on Unix
-			exec.Command("pkill", "-f", "dlv").Run()
+			_ = exec.Command("pkill", "-f", "dlv").Run()
 		}
 	}()
 
